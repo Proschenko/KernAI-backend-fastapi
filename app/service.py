@@ -1,20 +1,21 @@
-#service.py
+# service.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from .schemas import LaboratoriesRespone
+from .schemas import LaboratoriesResponse
 from datetime import date
 import os
 import shutil
 from fastapi import HTTPException
 
-async def get_labs(session: AsyncSession)-> list[LaboratoriesRespone]:
-    query=text("""
+
+async def get_labs(session: AsyncSession) -> list[LaboratoriesResponse]:
+    query = text("""
         SELECT id, labname
         FROM public.laboratories""")
-    
+
     result = await session.execute(query)
-    labs_data =  result.fetchall()
-    return [LaboratoriesRespone(**row._mapping) for row in labs_data]
+    labs_data = result.fetchall()
+    return [LaboratoriesResponse(**row._mapping) for row in labs_data]
 
 
 async def save_image(file, username: str) -> str:

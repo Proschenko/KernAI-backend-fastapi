@@ -25,7 +25,7 @@ logging.info(f"Попытка подключения к базе данных с
 try:
     # Создание подключения к базе данных
     engine = create_engine(DATABASE_URL)
-    
+
     # Попытка выполнения простого запроса
     with engine.connect() as connection:
         logging.info("Подключение к базе данных успешно!")

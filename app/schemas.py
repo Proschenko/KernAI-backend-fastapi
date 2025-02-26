@@ -1,16 +1,14 @@
-#schemas.py
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import date, datetime
 
 
-class LaboratoriesRespone(BaseModel):
-    id : UUID
-    labname : str
+class LaboratoriesResponse(BaseModel):
+    id: UUID
+    lab_name: str
 
 
 class ImgRequest(BaseModel):
-    id_img: str
-    username: str
+    id_img: UUID
     codes: list[str]
-    laboratories_id : UUID
+    laboratories_id: UUID

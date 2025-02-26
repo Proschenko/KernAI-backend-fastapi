@@ -1,13 +1,14 @@
-#routers.py
+# routers.py
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_session
 from . import schemas as schemas
-from .import service as serv 
+from . import service as serv
 
 router = APIRouter()
 
-@router.get("/labs", response_model=list[schemas.LaboratoriesRespone])
+
+@router.get("/labs", response_model=list[schemas.LaboratoriesResponse])
 async def get_organization_wells(session: AsyncSession = Depends(get_session)):
     try:
         # Вызов функции из service.py для получения списка лабораторий 
@@ -15,6 +16,7 @@ async def get_organization_wells(session: AsyncSession = Depends(get_session)):
         return labs_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
 
 @router.post("/upload_img")
 async def upload_image(file: UploadFile = File(...), username: str = ""):
@@ -26,7 +28,7 @@ async def upload_image(file: UploadFile = File(...), username: str = ""):
         raise HTTPException(status_code=500, detail=f"Ошибка при загрузке изображения: {str(e)}")
 
 
-@router.post("analyze_img")  #TODO MAGMUMS
+@router.post("analyze_img")  # TODO MAGMUMS
 async def analyze_img1(request: schemas.ImgRequest, session: AsyncSession = Depends(get_session)):
     try:
         pass
