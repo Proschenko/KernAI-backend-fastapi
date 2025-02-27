@@ -28,9 +28,16 @@ async def upload_image(file: UploadFile = File(...), username: str = ""):
         raise HTTPException(status_code=500, detail=f"Ошибка при загрузке изображения: {str(e)}")
 
 
-@router.post("analyze_img")  # TODO MAGMUMS
-async def analyze_img1(request: schemas.ImgRequest, session: AsyncSession = Depends(get_session)):
+@router.post("/analyze_img")
+async def analyze_image(request: schemas.ImgRequest, session: AsyncSession = Depends(get_session)):
     try:
-        pass
+        image_service = serv.ImageService(request)
+        results = await image_service.process_image()
+        return {"results": results}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка при анализе изображения: {str(e)}")
+
+
+if __name__ == "__main__":
+    img_req = schemas.ImgRequest().image_path = "D:\я у мамы программист\Diplom\datasets\1 source images\0007.jpg"
+    analyze_image(request=img_req, session=get_session())

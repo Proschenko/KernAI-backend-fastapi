@@ -9,6 +9,7 @@ class LaboratoriesResponse(BaseModel):
 
 
 class ImgRequest(BaseModel):
-    id_img: UUID
+    username: str 
+    image_path: str
     codes: list[str]
     laboratories_id: UUID
