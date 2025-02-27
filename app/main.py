@@ -27,3 +27,4 @@ app.add_middleware(
 app.include_router(router)
 
 logging.info("FastAPI приложение успешно запущено.")
+

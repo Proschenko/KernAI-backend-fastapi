@@ -10,7 +10,7 @@ from fastapi import HTTPException
 
 async def get_labs(session: AsyncSession) -> list[LaboratoriesResponse]:
     query = text("""
-        SELECT id, labname
+        SELECT id, lab_name
         FROM public.laboratories""")
 
     result = await session.execute(query)
