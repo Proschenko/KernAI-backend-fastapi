@@ -31,13 +31,13 @@ async def upload_image(file: UploadFile = File(...), username: str = ""):
 @router.post("/analyze_img")
 async def analyze_image(request: schemas.ImgRequest, session: AsyncSession = Depends(get_session)):
     try:
-        image_service = serv.ImageService(request)
-        results = await image_service.process_image()
+        results = serv.process_image(request)
         return {"results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при анализе изображения: {str(e)}")
 
 
 if __name__ == "__main__":
-    img_req = schemas.ImgRequest().image_path = "D:\я у мамы программист\Diplom\datasets\1 source images\0007.jpg"
+    img_req = schemas.ImgRequest()
+    img_req.image_path = "D:\\я у мамы программист\\Diplom\\datasets\\1 source images\\0007.jpg"
     analyze_image(request=img_req, session=get_session())
