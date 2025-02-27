@@ -2,4 +2,6 @@
 .env
 /app/__pycache__
 .idea/
+temp_output/
 /temp
+
