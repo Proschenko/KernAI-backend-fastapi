@@ -62,14 +62,11 @@ def process_image(request: ImgRequest):
 
     model = ImagePipelineModel(
         request=request,
-        # yolo_model_path_kern_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt"),
-        # yolo_model_path_text_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt")
+        yolo_model_path_kern_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt").replace("\\", "/"),
+        yolo_model_path_text_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt").replace("\\", "/")
 
-
-        # yolo_model_path_kern_detection="..models\YOLO_detect_kern.pt",
-        # yolo_model_path_text_detection="..models\YOLO_detect_text.pt"
-        yolo_model_path_kern_detection="D:/я у мамы программист/Diplom/KernAI-backend-fastapi/models/YOLO_detect_kern.pt",
-        yolo_model_path_text_detection="D:/я у мамы программист/Diplom/KernAI-backend-fastapi/models/YOLO_detect_text.pt"
+        # yolo_model_path_kern_detection="D:/я у мамы программист/Diplom/KernAI-backend-fastapi/models/YOLO_detect_kern.pt",
+        # yolo_model_path_text_detection="D:/я у мамы программист/Diplom/KernAI-backend-fastapi/models/YOLO_detect_text.pt"
     )
 
     result = model.execute_pipeline()
