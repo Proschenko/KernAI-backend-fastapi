@@ -1,15 +1,15 @@
 # service.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from .schemas import LaboratoriesResponse, ImgRequest
-from datetime import date
+from datetime import date, datetime
 import os
 import shutil
 from fastapi import HTTPException
 from tqdm import tqdm
 from PIL import Image
-
 from typing import List, Dict
+
+from .schemas import LaboratoriesResponse, ImgRequest, ImgResponse, ImageProcessingResult
 from .ImageOperation import ImageOperation
 from .KernDetection import KernDetection
 from .TextRecognition import TextRecognition
@@ -50,7 +50,7 @@ async def save_image(file, username: str) -> str:
 
 def process_image(request: ImgRequest):
     model = ImagePipelineModel(
-        image_path=request.image_path,
+        request=request,
         output_folder="temp_output",
         # yolo_model_path_kern_detection="..models/YOLO_detect_kern.pt",
         # yolo_model_path_text_detection="..models/YOLO_detect_text.pt"
@@ -64,9 +64,9 @@ def process_image(request: ImgRequest):
 
 
 class ImagePipelineModel:
-    def __init__(self, image_path: str, output_folder: str, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
-        self.image_path = image_path
-        self.image = Image.open(image_path)
+    def __init__(self, request: ImgRequest, output_folder: str, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
+        self.request = request
+        self.image = Image.open(request.image_path)
         self.output_folder = output_folder
         self.model_path_kern_detection = yolo_model_path_kern_detection
         self.model_path_text_detection = yolo_model_path_text_detection
@@ -77,36 +77,60 @@ class ImagePipelineModel:
         allowlist = '0123456789феспФЕСПeECc-*_.,'
         self.text_recognition = TextRecognition(model_langs, allowlist)
 
-    def execute_pipeline(self) -> List[Dict]:
+    def execute_pipeline(self) -> ImgResponse:
         """
         Выполняет весь pipeline обработки изображения.
 
         Возвращает:
             Список словарей с результатами обработки.
         """
-        result = []
-
+        start_time=datetime.now().isoformat()
+        results = []
+        
         # Шаг 1: Обрезка зерен
         cropped_images = self.kern_detection.crop_kern_with_obb_predictions(self.image, self.output_folder)
-
+        cropped_paths = [os.path.join(self.output_folder, f"crop_{i}.png") for i in range(len(cropped_images))]
+        
         # Шаг 2: Обработка белых углов
         processed_images = [self.image_processing.process_image_white_corners(img) for img in tqdm(cropped_images, desc="Обработка белых углов")]
-
+        
         # Шаг 3: Применение CLAHE
         clahe_images = [self.image_processing.clahe_processing(img) for img in tqdm(processed_images, desc="Применение CLAHE")]
-
+        
         # Шаг 4: Кластеризация
         clustered_images = [self.image_processing.process_cluster_image(img) for img in tqdm(clahe_images, desc="Кластеризация")]
-
+        
         # Шаг 5: Поворот изображений
         rotated_images = [self.kern_text_detection.image_rotated_with_obb_predictions(img) for img in tqdm(clustered_images, desc="Поворот изображений")]
-
+        rotated_paths = [os.path.join(self.output_folder, f"rotated_{i}.png") for i in range(len(rotated_images))]
+        
         # Шаг 6: Распознавание текста
-        for img in tqdm(rotated_images, desc="Распознавание текста"):
-            text_result = self.text_recognition.recognize_text(img)
-            result.append(text_result)
+        for idx, img in enumerate(tqdm(rotated_images, desc="Распознавание текста")):
+            recognize_result = self.text_recognition.recognize_text(img, return_both_results=True, save_folder_path=self.output_folder)
 
-        return result
+            ocr_confidence = recognize_result.get("ocr_confidence", 0.0)
+            ocr_predicted_text = recognize_result.get("ocr_result", "")
+            ocr_confidence_180 = recognize_result.get("ocr_confidence_180", 0.0)
+            ocr_predicted_text_180 = recognize_result.get("ocr_result_180", "")
+
+            results.append(ImageProcessingResult(
+                model_confidence=ocr_confidence,
+                predicted_text=ocr_predicted_text,
+                algorithm_text=None,
+                cropped_path=cropped_paths[idx] if idx < len(cropped_paths) else "",
+                rotated_path=rotated_paths[idx] if idx < len(rotated_paths) else ""
+            ))
+
+        return ImgResponse(
+            user_name=self.request.username,
+            codes=self.request.codes,
+            laboratories_id=self.request.laboratories_id,  # Заглушка, замени на реальный ID
+            insert_date=start_time,
+            input_type = "Изображение" if not self.request.codes else "Изображение + ведомость",
+            download_date=datetime.now().isoformat(),
+            processing_results=results
+        )
+
     
 
 if __name__ == "__main__":

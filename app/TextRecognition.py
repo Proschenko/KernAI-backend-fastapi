@@ -50,9 +50,11 @@ class TextRecognition:
                                                        save_folder_path,
                                                        return_both_results)
             return {"image_cv": image_cv,
-                    "ocr_reuslt": ' '.join([result[1] for result in ocr_result]),
+                    "ocr_result": ' '.join([result[1] for result in ocr_result]),
+                    "ocr_confidence": ocr_confidence,
                     "rotated_image_180": rotated_image_180,
                     "ocr_result_180": ' '.join([result[1] for result in ocr_result_180]),
+                    "ocr_confidence_180": ocr_confidence_180,
                     "path": output_path}
         else:
             # Сравнение результатов OCR и выбор лучшего
