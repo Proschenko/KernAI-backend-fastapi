@@ -5,8 +5,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes import router
 
 # Логирование
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+# logging.basicConfig(filename='app.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Создаем основной логгер
+logger = logging.getLogger()
+
+# Устанавливаем уровень логирования для всего проекта
+logger.setLevel(logging.INFO)
+
+# Создаем консольный обработчик для вывода логов в консоль
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+# Создаем обработчик для записи логов в файл
+file_handler = logging.FileHandler('app.log')
+file_handler.setLevel(logging.DEBUG)
+
+# Определяем формат для логов
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
+file_handler.setFormatter(formatter)
+
+# Добавляем обработчики к логгеру
+logger.addHandler(console_handler)
+logger.addHandler(file_handler)
+
 
 app = FastAPI()
 

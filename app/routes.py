@@ -31,7 +31,7 @@ async def upload_image(file: UploadFile = File(...), username: str = ""):
 
 @router.post("/analyze_img")
 async def analyze_image(request: schemas.ImgRequest, session: AsyncSession = Depends(get_session)):
-    # logging.info(request)
+    logging.info(request)
     try:
         results = serv.process_image(request)
         return {"results": results}

@@ -8,7 +8,9 @@ from fastapi import HTTPException
 from tqdm import tqdm
 from PIL import Image
 from typing import List, Dict
+import uuid
 
+import logging
 from .schemas import LaboratoriesResponse, ImgRequest, ImgResponse, ImageProcessingResult
 from .ImageOperation import ImageOperation
 from .KernDetection import KernDetection
@@ -49,14 +51,25 @@ async def save_image(file, username: str) -> str:
 
 
 def process_image(request: ImgRequest):
+    logging.info("Current working directory: %s", os.getcwd())
+
+    yolo_model_path_kern_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt")
+    yolo_model_path_text_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt")
+    logging.info(yolo_model_path_kern_detection)
+    logging.info(yolo_model_path_text_detection)
+    logging.info(uuid.uuid4())
+
+
     model = ImagePipelineModel(
         request=request,
-        output_folder="temp_output",
-        # yolo_model_path_kern_detection="..models/YOLO_detect_kern.pt",
-        # yolo_model_path_text_detection="..models/YOLO_detect_text.pt"
+        # yolo_model_path_kern_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt"),
+        # yolo_model_path_text_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt")
+
+
+        # yolo_model_path_kern_detection="..models\YOLO_detect_kern.pt",
+        # yolo_model_path_text_detection="..models\YOLO_detect_text.pt"
         yolo_model_path_kern_detection="D:/я у мамы программист/Diplom/KernAI-backend-fastapi/models/YOLO_detect_kern.pt",
         yolo_model_path_text_detection="D:/я у мамы программист/Diplom/KernAI-backend-fastapi/models/YOLO_detect_text.pt"
-
     )
 
     result = model.execute_pipeline()
@@ -64,10 +77,12 @@ def process_image(request: ImgRequest):
 
 
 class ImagePipelineModel:
-    def __init__(self, request: ImgRequest, output_folder: str, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
+    def __init__(self, request: ImgRequest, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
+        party_uuid = uuid.uuid4()
+        party_uuid_str = str(party_uuid)
         self.request = request
         self.image = Image.open(request.image_path)
-        self.output_folder = output_folder
+        self.output_folder = f"temp\\party_{party_uuid_str}"
         self.model_path_kern_detection = yolo_model_path_kern_detection
         self.model_path_text_detection = yolo_model_path_text_detection
         self.image_processing = ImageOperation()
@@ -88,25 +103,37 @@ class ImagePipelineModel:
         results = []
         
         # Шаг 1: Обрезка зерен
-        cropped_images = self.kern_detection.crop_kern_with_obb_predictions(self.image, self.output_folder)
+        step1_folder = os.path.join(self.output_folder, 'step1_crop_kern')
+        os.makedirs(step1_folder, exist_ok=True)
+        cropped_images = self.kern_detection.crop_kern_with_obb_predictions(self.image, step1_folder)
         cropped_paths = [os.path.join(self.output_folder, f"crop_{i}.png") for i in range(len(cropped_images))]
         
         # Шаг 2: Обработка белых углов
-        processed_images = [self.image_processing.process_image_white_corners(img) for img in tqdm(cropped_images, desc="Обработка белых углов")]
+        step2_folder = os.path.join(self.output_folder, 'step2_white_corners')
+        os.makedirs(step2_folder, exist_ok=True)
+        processed_images = [self.image_processing.process_image_white_corners(img, step2_folder) for img in tqdm(cropped_images, desc="Обработка белых углов")]
         
         # Шаг 3: Применение CLAHE
-        clahe_images = [self.image_processing.clahe_processing(img) for img in tqdm(processed_images, desc="Применение CLAHE")]
+        step3_folder = os.path.join(self.output_folder, 'step3_clahe')
+        os.makedirs(step3_folder, exist_ok=True)
+        clahe_images = [self.image_processing.clahe_processing(img, step3_folder) for img in tqdm(processed_images, desc="Применение CLAHE")]
         
         # Шаг 4: Кластеризация
-        clustered_images = [self.image_processing.process_cluster_image(img) for img in tqdm(clahe_images, desc="Кластеризация")]
+        step4_folder = os.path.join(self.output_folder, 'step4_cluster_image')
+        os.makedirs(step4_folder, exist_ok=True)
+        clustered_images = [self.image_processing.process_cluster_image(img, save_folder_path=step4_folder) for img in tqdm(clahe_images, desc="Кластеризация")]
         
         # Шаг 5: Поворот изображений
-        rotated_images = [self.kern_text_detection.image_rotated_with_obb_predictions(img) for img in tqdm(clustered_images, desc="Поворот изображений")]
+        step5_folder = os.path.join(self.output_folder, 'step5_rotate_image')
+        os.makedirs(step5_folder, exist_ok=True)
+        rotated_images = [self.kern_text_detection.image_rotated_with_obb_predictions(img, step5_folder) for img in tqdm(clustered_images, desc="Поворот изображений")]
         rotated_paths = [os.path.join(self.output_folder, f"rotated_{i}.png") for i in range(len(rotated_images))]
         
         # Шаг 6: Распознавание текста
+        step6_folder = os.path.join(self.output_folder, 'step6_recognize_text')
+        os.makedirs(step6_folder, exist_ok=True)
         for idx, img in enumerate(tqdm(rotated_images, desc="Распознавание текста")):
-            recognize_result = self.text_recognition.recognize_text(img, return_both_results=True, save_folder_path=self.output_folder)
+            recognize_result = self.text_recognition.recognize_text(img, return_both_results=True, save_folder_path=step6_folder)
 
             ocr_confidence = recognize_result.get("ocr_confidence", 0.0)
             ocr_predicted_text = recognize_result.get("ocr_result", "")
