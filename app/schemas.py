@@ -8,6 +8,7 @@ class LaboratoriesResponse(BaseModel):
     lab_name: str
 
 class ImgRequest(BaseModel):
+
     username: str 
     image_path: str
     codes: List[str]
