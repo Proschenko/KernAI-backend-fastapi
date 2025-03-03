@@ -1,6 +1,7 @@
 /.venv/
 .env
 /app/__pycache__
+/app/utils/__pycache__
 .idea/
 temp_output/
 /temp
