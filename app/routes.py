@@ -1,4 +1,5 @@
 # routers.py
+import logging
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_session
@@ -56,9 +57,13 @@ async def upload_image(file: UploadFile = File(...), username: str = ""):
 
 
 
-@router.post("analyze_img")  # TODO MAGMUMS
-async def analyze_img1(request: schemas.ImgRequest, session: AsyncSession = Depends(get_session)):
+@router.post("/analyze_img")
+async def analyze_image(request: schemas.ImgRequest, session: AsyncSession = Depends(get_session)):
+    logging.info(request)
     try:
-        pass
+        results = serv.process_image(request)
+        return {"results": results}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка при анализе изображения: {str(e)}")
+
+
