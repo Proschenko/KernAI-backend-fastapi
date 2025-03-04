@@ -1,5 +1,9 @@
 # app/redis_config.py
+
 from celery import Celery
+from redis import Redis
+
+redis_client = Redis(host="localhost", port=6379, db=0)
 
 celery_app = Celery(
     "worker",
