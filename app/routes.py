@@ -8,7 +8,6 @@ from . import service as serv
 from typing import List
 from app.redis_config import celery_app
 from celery.result import AsyncResult
-from app.tasks import process_image_task
 
 
 router = APIRouter()
@@ -95,3 +94,13 @@ async def get_task_status(task_id: str):
     else:
         return {"task_id": task_id, "status": task_result.status}
 
+
+@router.get("/queue_size")
+async def get_queue_size():
+    try:
+        # Вызов функции из service.py для получения данных
+        queue_size = await serv.get_queue_size()
+        return {"queue_size": queue_size}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    

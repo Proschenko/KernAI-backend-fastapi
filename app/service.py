@@ -11,6 +11,7 @@ from PIL import Image
 import uuid
 import logging
 
+from .redis_config import redis_client
 from .schemas import LaboratoriesResponse, KernsResponse, KernDetailsResponse, CommentResponse, ImgRequest, ImgResponse, ImageProcessingResult
 from .utils.ImageOperation import ImageOperation
 from .utils.KernDetection import KernDetection
@@ -130,6 +131,10 @@ def process_image(request_data: dict):
 
     result = model.execute_pipeline()
     return result.model_dump()  # Возвращаем JSON-словарь для корректной работы с Celery
+
+
+async def get_queue_size():
+    return redis_client.llen("celery")  # Возвращает количество задач в очереди
 
 
 class ImagePipelineModel:
