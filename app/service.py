@@ -1,4 +1,4 @@
-# service.py
+# app/service.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from datetime import date, datetime
@@ -10,10 +10,11 @@ from tqdm import tqdm
 from PIL import Image
 import uuid
 import logging
+
 from .schemas import LaboratoriesResponse, KernsResponse, KernDetailsResponse, CommentResponse, ImgRequest, ImgResponse, ImageProcessingResult
-from .ImageOperation import ImageOperation
-from .KernDetection import KernDetection
-from .TextRecognition import TextRecognition
+from .utils.ImageOperation import ImageOperation
+from .utils.KernDetection import KernDetection
+from .utils.TextRecognition import TextRecognition
 
 
 async def get_labs(session: AsyncSession) -> List[LaboratoriesResponse]:
@@ -112,27 +113,23 @@ async def get_kern_comments(session: AsyncSession, kern_id: str) -> List[Comment
     comments = result.fetchall()
     return [CommentResponse(**row._mapping) for row in comments]
 
-def process_image(request: ImgRequest):
-    logging.info("Current working directory: %s", os.getcwd())
-
-    yolo_model_path_kern_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt")
-    yolo_model_path_text_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt")
-    logging.info(yolo_model_path_kern_detection)
-    logging.info(yolo_model_path_text_detection)
-    logging.info(uuid.uuid4())
-
+def process_image(request_data: dict):
+    """
+    Выполняет обработку изображения через ImagePipelineModel.
+    
+    :param request_data: Данные запроса в формате словаря (так как Celery не поддерживает Pydantic-объекты)
+    :return: Результат обработки в виде JSON-словаря
+    """
+    request = ImgRequest(**request_data)  # Преобразуем словарь в объект Pydantic
 
     model = ImagePipelineModel(
         request=request,
-        yolo_model_path_kern_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt").replace("\\", "/"),
-        yolo_model_path_text_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt").replace("\\", "/")
-
-        # yolo_model_path_kern_detection="D:/я у мамы программист/Diplom/KernAI-backend-fastapi/models/YOLO_detect_kern.pt",
-        # yolo_model_path_text_detection="D:/я у мамы программист/Diplom/KernAI-backend-fastapi/models/YOLO_detect_text.pt"
+        yolo_model_path_kern_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt").replace("\\", "/"),
+        yolo_model_path_text_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt").replace("\\", "/")
     )
 
     result = model.execute_pipeline()
-    return result
+    return result.model_dump()  # Возвращаем JSON-словарь для корректной работы с Celery
 
 
 class ImagePipelineModel:
@@ -208,9 +205,9 @@ class ImagePipelineModel:
             ))
 
         return ImgResponse(
-            user_name=self.request.username,
+            user_name=self.request.user_name,
             codes=self.request.codes,
-            laboratories_id=self.request.laboratories_id,  # Заглушка, замени на реальный ID
+            lab_id=self.request.lab_id,  # Заглушка, замени на реальный ID
             insert_date=start_time,
             input_type = "Изображение" if not self.request.codes else "Изображение + ведомость",
             download_date=datetime.now().isoformat(),
@@ -224,7 +221,7 @@ if __name__ == "__main__":
         image_path="D:\\я у мамы программист\\Diplom\\datasets\\1 source images\\0007.jpg",
         username="user_example",
         codes=[],  # Здесь нужно передать список или оставить пустым
-        laboratories_id="cd4f237c-bd89-40d2-b983-05ffcd436b60"  # Пример, если это ID лаборатории
+        lab_id="cd4f237c-bd89-40d2-b983-05ffcd436b60"  # Пример, если это ID лаборатории
     )
     print(process_image(img_req))
 
