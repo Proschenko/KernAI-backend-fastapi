@@ -1,4 +1,4 @@
-# service.py
+# app/service.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from datetime import date, datetime
@@ -113,27 +113,23 @@ async def get_kern_comments(session: AsyncSession, kern_id: str) -> List[Comment
     comments = result.fetchall()
     return [CommentResponse(**row._mapping) for row in comments]
 
-def process_image(request: ImgRequest):
-    logging.info("Current working directory: %s", os.getcwd())
-
-    yolo_model_path_kern_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt")
-    yolo_model_path_text_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt")
-    logging.info(yolo_model_path_kern_detection)
-    logging.info(yolo_model_path_text_detection)
-    logging.info(uuid.uuid4())
-
+def process_image(request_data: dict):
+    """
+    Выполняет обработку изображения через ImagePipelineModel.
+    
+    :param request_data: Данные запроса в формате словаря (так как Celery не поддерживает Pydantic-объекты)
+    :return: Результат обработки в виде JSON-словаря
+    """
+    request = ImgRequest(**request_data)  # Преобразуем словарь в объект Pydantic
 
     model = ImagePipelineModel(
         request=request,
-        yolo_model_path_kern_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt").replace("\\", "/"),
-        yolo_model_path_text_detection = os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt").replace("\\", "/")
-
-        # yolo_model_path_kern_detection="D:/я у мамы программист/Diplom/KernAI-backend-fastapi/models/YOLO_detect_kern.pt",
-        # yolo_model_path_text_detection="D:/я у мамы программист/Diplom/KernAI-backend-fastapi/models/YOLO_detect_text.pt"
+        yolo_model_path_kern_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt").replace("\\", "/"),
+        yolo_model_path_text_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt").replace("\\", "/")
     )
 
     result = model.execute_pipeline()
-    return result
+    return result.model_dump()  # Возвращаем JSON-словарь для корректной работы с Celery
 
 
 class ImagePipelineModel:
