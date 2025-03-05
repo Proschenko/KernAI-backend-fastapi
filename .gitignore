@@ -5,4 +5,5 @@
 temp_output/
 /temp
 /app.log
-
+tests/__pycache__
+tests/integration/__pycache__
