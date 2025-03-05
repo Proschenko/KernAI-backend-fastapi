@@ -1,14 +1,16 @@
-# routers.py
+# app/routes.py
 import logging
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_session
 from . import schemas as schemas
 from . import service as serv
 from typing import List
+from app.redis_config import celery_app
+from celery.result import AsyncResult
+
 
 router = APIRouter()
-
 
 @router.get("/labs", response_model=List[schemas.LaboratoriesResponse])
 async def get_organization_wells(session: AsyncSession = Depends(get_session)):
@@ -55,15 +57,50 @@ async def upload_image(file: UploadFile = File(...), username: str = ""):
         raise HTTPException(status_code=500, detail=f"Ошибка при загрузке изображения: {str(e)}")
 
 
+# @router.post("/analyze_img")
+# async def analyze_image(request: schemas.ImgRequest, bg_task: BackgroundTasks, session: AsyncSession = Depends(get_session)):
+#     # logging.info(request)
+#     try:
+#         results = bg_task.add_task(serv.process_image, request)
+#         return {"results": results}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Ошибка при анализе изображения: {str(e)}")
+
 
 
 @router.post("/analyze_img")
 async def analyze_image(request: schemas.ImgRequest, session: AsyncSession = Depends(get_session)):
-    logging.info(request)
+    """
+    Отправляет изображение на фоновую обработку.
+    """
     try:
-        results = serv.process_image(request)
-        return {"results": results}
+        task = celery_app.send_task("app.tasks.process_image_task", args=[request.model_dump()])
+        return {"task_id": task.id}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка при анализе изображения: {str(e)}")
+        return {"error": str(e)}
 
 
+@router.get("/task_status/{task_id}")
+async def get_task_status(task_id: str):
+    """
+    Проверяет статус задачи Celery и возвращает результат, если он готов.
+    """
+    task_result = AsyncResult(task_id, app=celery_app)
+
+    if task_result.status == "SUCCESS":
+        return {"task_id": task_id, "status": task_result.status, "result": task_result.result}
+    elif task_result.status == "FAILURE":
+        return {"task_id": task_id, "status": task_result.status, "error": str(task_result.result)}
+    else:
+        return {"task_id": task_id, "status": task_result.status}
+
+
+@router.get("/queue_size")
+async def get_queue_size():
+    try:
+        # Вызов функции из service.py для получения данных
+        queue_size = await serv.get_queue_size()
+        return {"queue_size": queue_size}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    

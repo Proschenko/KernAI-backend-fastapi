@@ -5,6 +5,7 @@
 ```
 git clone "repo"
 python -m venv .venv
+\.venv\Scripts\activate
 pip install -r  requirements.txt
 ```
 
@@ -20,8 +21,14 @@ DATABASE_URL=postgresql+asyncpg://{user_db}:{password_db}@{url}:{port}/{db_name}
 docker run --name KernAI-redis-server -d -p 6379:6379 -v redis_data:/data redis
 ```
 
-4. Запуск приложения:
+4. Запуск Celary в отдельной консоли
+```
+celery -A app.redis_config.celery_app worker --loglevel=info
+```
+
+5. Запуск приложения в отдельной консоли
 
 ```
 uvicorn app.main:app --reload
 ```
+
