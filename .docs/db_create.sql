@@ -1,7 +1,5 @@
--- version = 4
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- version = 5
 
--- Таблица пользователей
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_name TEXT NOT NULL,
@@ -38,22 +36,40 @@ CREATE TABLE comments (
     insert_date TIMESTAMP DEFAULT NOW()
 );
 
--- Таблица данных кернов
+-- Таблица партий кернов
+CREATE TABLE kern_party (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_party UUID UNIQUE NOT NULL  -- Уникальный идентификатор партии (одна партия может включать несколько записей kern_data)
+);
+
+-- Таблица для хранения списка строк (многие ко многим с kern_party)
+CREATE TABLE kern_party_statements (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    party_id UUID REFERENCES kern_party(id_party) ON DELETE CASCADE,
+    kern_code_from_statement TEXT NOT NULL
+);
+
+-- Таблица аналитики кернов
+CREATE TABLE kern_data_analytics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    confidence_model DOUBLE PRECISION NOT NULL,
+    code_model TEXT NOT NULL,
+    code_algorithm TEXT NOT NULL,
+    input_type TEXT NOT NULL,
+    download_date TIMESTAMP DEFAULT NOW() NOT NULL,
+    validation_date TIMESTAMP NOT NULL
+);
+
+-- Основная таблица данных кернов
 CREATE TABLE kern_data (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    id_party UUID NOT NULL DEFAULT uuid_generate_v4(),
+    id_party UUID REFERENCES kern_party(id_party) ON DELETE CASCADE,  -- Прямая связь с kern_party
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     insert_date TIMESTAMP DEFAULT NOW(),
     lab_id UUID REFERENCES laboratories(id) ON DELETE CASCADE,
     kern_id UUID REFERENCES kerns(id) ON DELETE CASCADE,
     damage_id UUID REFERENCES damages(id) ON DELETE CASCADE,
-    confidence_model DOUBLE PRECISION NOT NULL,
-    code_model TEXT NOT NULL,
-    code_algorithm TEXT NOT NULL,
-    code_verify TEXT NOT NULL,
-    input_type TEXT NOT NULL,
-    download_date TIMESTAMP DEFAULT NOW() NOT NULL,
-    validation_date TIMESTAMP NOT NULL
+    analytic_id UUID UNIQUE REFERENCES kern_data_analytics(id) ON DELETE CASCADE
 );
 
 --- Вставка пользователей (10 пользователей)
@@ -82,7 +98,7 @@ VALUES
     ('Трещина'), ('Скол'), ('Износ'), ('Деформация'), ('Разрыв'), ('Царапина') 
 RETURNING id;
 
--- Вставка комментариев (уникальный комментарий для каждого образца) TODO выполнить несколько раз этот блок
+-- Вставка комментариев (уникальный комментарий для каждого образца)
 INSERT INTO comments (kern_id, lab_id, user_id, comment_text, insert_date) 
 SELECT 
     k.id AS kern_id,
@@ -98,26 +114,44 @@ SELECT
     NOW() - (random() * INTERVAL '365 days') AS insert_date
 FROM kerns k;
 
--- Вставка данных в kern_data с логически связанными датами  TODO выполнить несколько раз
-INSERT INTO kern_data (
-    user_id, insert_date, lab_id, kern_id, damage_id, confidence_model, 
-    code_model, code_algorithm, code_verify, input_type, download_date, validation_date
+-- Вставка данных в kern_party (10 партий)
+INSERT INTO kern_party (id_party)
+SELECT uuid_generate_v4() FROM generate_series(1, 10)
+RETURNING id_party;
+
+-- Вставка данных в kern_party_statements (привязка строк к партиям)
+INSERT INTO kern_party_statements (party_id, kern_code_from_statement)
+SELECT 
+    (SELECT id_party FROM kern_party ORDER BY RANDOM() LIMIT 1),
+    'KERN_STMT_' || generate_series
+FROM generate_series(1, 20);
+
+-- Вставка данных в kern_data_analytics (10 записей аналитики)
+INSERT INTO kern_data_analytics (
+    confidence_model, code_model, code_algorithm, input_type, download_date, validation_date
 ) 
 SELECT 
+    random(),
+    'Model_' || substring(md5(random()::text) from 1 for 5),
+    'Algorithm_' || substring(md5(random()::text) from 1 for 5),
+    CASE WHEN random() > 0.5 THEN 'Manual' ELSE 'Automatic' END,
+    NOW() - (random() * INTERVAL '365 days'), 
+    NOW() - (random() * INTERVAL '365 days') + (random() * INTERVAL '10 minutes' + INTERVAL '10 minutes')
+FROM generate_series(1, 10);
+
+-- Вставка данных в kern_data (логически связанные данные)
+INSERT INTO kern_data (
+    id_party, user_id, insert_date, lab_id, kern_id, damage_id, analytic_id
+) 
+SELECT 
+    (SELECT id_party FROM kern_party ORDER BY RANDOM() LIMIT 1),
     (SELECT id FROM users ORDER BY RANDOM() LIMIT 1),
-    NOW() - (random() * INTERVAL '365 days'),  -- Генерация insert_date
+    NOW() - (random() * INTERVAL '365 days'),
     (SELECT id FROM laboratories ORDER BY RANDOM() LIMIT 1),
     (SELECT id FROM kerns ORDER BY RANDOM() LIMIT 1),
     CASE 
         WHEN random() > 0.7 THEN NULL  
         ELSE (SELECT id FROM damages ORDER BY RANDOM() LIMIT 1) 
     END,
-    random(),
-    'Model_' || substring(md5(random()::text) from 1 for 5),
-    'Algorithm_' || substring(md5(random()::text) from 1 for 5),
-    CASE WHEN random() > 0.5 THEN 'Verified' ELSE 'Unverified' END,
-    CASE WHEN random() > 0.5 THEN 'Manual' ELSE 'Automatic' END,
-    (NOW() - (random() * INTERVAL '365 days')) + (random() * INTERVAL '5 minutes' + INTERVAL '2 minutes'),  -- Генерация download_date
-    (NOW() - (random() * INTERVAL '365 days')) + (random() * INTERVAL '5 minutes' + INTERVAL '2 minutes') + (random() * INTERVAL '10 minutes' + INTERVAL '10 minutes')  -- Генерация validation_date
+    (SELECT id FROM kern_data_analytics ORDER BY RANDOM() LIMIT 1)
 FROM generate_series(1, 10);
-
