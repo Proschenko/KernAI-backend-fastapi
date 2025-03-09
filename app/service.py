@@ -57,7 +57,7 @@ async def get_kerns(session: AsyncSession) -> List[KernsResponse]:
             k.id,
             k.kern_code, 
             l.lab_name, 
-            kd.insert_date AS last_date,
+            kd.insert_date AS last_date, 
             u.user_name,
             d.damage_type 
         FROM kerns k
