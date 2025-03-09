@@ -55,7 +55,7 @@ async def get_kerns(session: AsyncSession) -> List[KernsResponse]:
             k.id,
             k.kern_code, 
             l.lab_name, 
-            kd.download_date AS last_date, 
+            kd.insert_date AS last_date, 
             u.user_name,
             d.damage_type 
         FROM kerns k
@@ -63,7 +63,7 @@ async def get_kerns(session: AsyncSession) -> List[KernsResponse]:
         JOIN laboratories l ON kd.lab_id = l.id
         JOIN users u ON kd.user_id = u.id
         LEFT JOIN damages d ON kd.damage_id = d.id
-        ORDER BY k.kern_code, kd.download_date DESC;
+        ORDER BY k.kern_code, kd.insert_date DESC;
     """)
 
     result = await session.execute(query)
