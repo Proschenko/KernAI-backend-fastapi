@@ -55,3 +55,15 @@ class ImgResponse(BaseModel):
     download_date: datetime  # Время выполнения алгоритма
     processing_results: List[ImageProcessingResult]  # Список результатов обработки
 
+#region inner project schemas
+class OCRResult(BaseModel):
+    """Схема возврата данных после распознавания текста."""
+    text_ocr: str
+    words_ocr: List[str]
+    confidence_ocr: float
+
+class OCRResultSelectorAlgotitm(BaseModel):
+    """Схема возврата данных после выбора наиболее похожего кода из ведомости."""
+    ocr_result: OCRResult
+    text_algoritm: str | None
+#endregion

@@ -15,7 +15,7 @@ from .utils.celary.redis_config import redis_client
 from .schemas import LaboratoriesResponse, KernsResponse, KernDetailsResponse, CommentResponse, ImgRequest, ImgResponse, ImageProcessingResult
 from .utils.ImageOperation import ImageOperation
 from .utils.KernDetection import KernDetection
-from .utils.TextRecognition import TextRecognition
+from .utils.TextRecognition import EasyOCRTextRecognition, OCRResultSelector
 
 
 async def get_labs(session: AsyncSession) -> List[LaboratoriesResponse]:
@@ -151,7 +151,7 @@ class ImagePipelineModel:
         self.kern_text_detection = KernDetection(yolo_model_path_text_detection)
         model_langs = ['ru']
         allowlist = '0123456789феспФЕСПeECc-*_.,'
-        self.text_recognition = TextRecognition(model_langs, allowlist)
+        self.text_recognition = EasyOCRTextRecognition(model_langs, allowlist)
 
     def execute_pipeline(self) -> ImgResponse:
         """
@@ -193,18 +193,20 @@ class ImagePipelineModel:
         # Шаг 6: Распознавание текста
         step6_folder = os.path.join(self.output_folder, 'step6_recognize_text')
         os.makedirs(step6_folder, exist_ok=True)
-        for idx, img in enumerate(tqdm(rotated_images, desc="Распознавание текста")):
-            recognize_result = self.text_recognition.recognize_text(img, return_both_results=True, save_folder_path=step6_folder)
 
-            ocr_confidence = recognize_result.get("ocr_confidence", 0.0)
-            ocr_predicted_text = recognize_result.get("ocr_result", "")
-            ocr_confidence_180 = recognize_result.get("ocr_confidence_180", 0.0)
-            ocr_predicted_text_180 = recognize_result.get("ocr_result_180", "")
+        ocr_selector = OCRResultSelector(self.request.codes)
+
+        for idx, img in enumerate(tqdm(rotated_images, desc="Распознавание текста")):
+            # Получаем два варианта результата OCR
+            ocr_result_1, ocr_result_2 = self.text_recognition.recognize_text(img)
+
+            # Выбираем наилучший вариант
+            best_result = ocr_selector.select_best_text(ocr_result_1, ocr_result_2)
 
             results.append(ImageProcessingResult(
-                model_confidence=ocr_confidence,
-                predicted_text=ocr_predicted_text,
-                algorithm_text=None,
+                model_confidence=best_result.ocr_result.confidence_ocr, # тут уверенность модели
+                predicted_text=best_result.ocr_result.text_ocr, # тут текст, который предсказала модель
+                algorithm_text=best_result.text_algoritm, # тут наиболее похожий текст по мнению алгоритма
                 cropped_path=cropped_paths[idx] if idx < len(cropped_paths) else "",
                 rotated_path=rotated_paths[idx] if idx < len(rotated_paths) else ""
             ))
@@ -214,10 +216,11 @@ class ImagePipelineModel:
             codes=self.request.codes,
             lab_id=self.request.lab_id,  # Заглушка, замени на реальный ID
             insert_date=start_time,
-            input_type = "Изображение" if not self.request.codes else "Изображение + ведомость",
+            input_type="Изображение" if not self.request.codes else "Изображение + ведомость",
             download_date=datetime.now().isoformat(),
             processing_results=results
         )
+
 
     
 
