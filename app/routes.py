@@ -8,18 +8,50 @@ from . import service as serv
 from typing import List
 from app.redis_config import celery_app
 from celery.result import AsyncResult
-
+from app.utils.auth import decode_token, check_role
+from uuid import UUID
 
 router = APIRouter()
 
+#region dev
+#TODO Удалить после тестирования а также защитить все API
+# 🔒 Защищенный эндпоинт — доступен только авторизованным пользователям
+@router.get("/protected")
+async def protected_endpoint(user=Depends(decode_token)):
+    return {"message": f"Hello, {user['preferred_username']}"}
+
+# 🔒 Доступ только для пользователей с ролью "admin"
+@router.get("/admin")
+async def admin_endpoint(user=Depends(check_role("admin"))):  # <-- ВАЖНО: Без вызова (без скобок)
+    return {"message": "Welcome, Admin!"}
+
+@router.get("/user-info")
+async def user_info(user=Depends(decode_token)):
+    return {"username": user["username"], "email": user["email"]}
+#endregion
+
+
 @router.get("/labs", response_model=List[schemas.LaboratoriesResponse])
-async def get_organization_wells(session: AsyncSession = Depends(get_session)):
+async def get_laboratories(session: AsyncSession = Depends(get_session)):
     try:
         # Вызов функции из service.py для получения списка лабораторий 
         labs_data = await serv.get_labs(session)
         return labs_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    
+@router.get("/lab_id/{lab_name}", response_model=UUID)
+async def get_lab_id_by_name(lab_name: str, session: AsyncSession = Depends(get_session)):
+    try:
+        # Вызов функции из service.py для получения id лаборатории по имени
+        lab_id = await serv.get_lab_id_by_name(lab_name, session)
+        if not lab_id:
+            raise HTTPException(status_code=404, detail="Laboratory not found")
+        return lab_id
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+
 
 @router.get("/kerns", response_model=List[schemas.KernsResponse])
 async def get_kerns_data(session: AsyncSession = Depends(get_session)):
@@ -43,6 +75,18 @@ async def get_kern_comments(kern_id: str, session: AsyncSession = Depends(get_se
     try:
         comments = await serv.get_kern_comments(session, kern_id)
         return comments
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    
+@router.post("/kern/comments", response_model=schemas.CommentResponse)
+async def add_kern_comment(
+    comment: schemas.CommentCreateRequest,
+    session: AsyncSession = Depends(get_session),
+    user: dict = Depends(decode_token)  # Получаем ID пользователя из токена
+):
+    try:
+        new_comment = await serv.add_kern_comment(session, comment, user["id"], user["username"])
+        return new_comment
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 

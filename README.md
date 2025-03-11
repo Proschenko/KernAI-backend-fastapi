@@ -13,6 +13,11 @@ pip install -r  requirements.txt
 
 ```
 DATABASE_URL=postgresql+asyncpg://{user_db}:{password_db}@{url}:{port}/{db_name}
+
+KEYCLOAK_SERVER_URL=https://your-keycloak-server/auth
+KEYCLOAK_REALM=your-realm
+KEYCLOAK_CLIENT_ID=your-client-id
+KEYCLOAK_CLIENT_SECRET=your-client-secret
 ```
 
 3. Поднятие redis для хранения очереди
@@ -22,6 +27,7 @@ docker run --name KernAI-redis-server -d -p 6379:6379 -v redis_data:/data redis
 ```
 
 4. Запуск Celary в отдельной консоли
+
 ```
 celery -A app.redis_config.celery_app worker --loglevel=info
 ```
@@ -31,4 +37,3 @@ celery -A app.redis_config.celery_app worker --loglevel=info
 ```
 uvicorn app.main:app --reload
 ```
-
