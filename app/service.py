@@ -140,10 +140,9 @@ async def get_queue_size():
 class ImagePipelineModel:
     def __init__(self, request: ImgRequest, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
         party_uuid = uuid.uuid4()
-        party_uuid_str = str(party_uuid)
         self.request = request
         self.image = Image.open(request.image_path)
-        self.output_folder = f"temp\\party_{party_uuid_str}"
+        self.output_folder = f"temp\\{str(request.user_name)}\\party_{str(party_uuid)}"
         self.model_path_kern_detection = yolo_model_path_kern_detection
         self.model_path_text_detection = yolo_model_path_text_detection
         self.image_processing = ImageOperation()

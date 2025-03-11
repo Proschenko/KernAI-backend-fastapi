@@ -32,13 +32,13 @@ class EasyOCRTextRecognition(TextRecognitionBase):
         # Первый проход OCR
         ocr_result = self.reader.readtext(image_cv, allowlist=self.allowlist)
         words = [result[1] for result in ocr_result]
-        confidence = sum(float(result[2]) for result in ocr_result) if ocr_result else 0.0  # Приводим к float
+        confidence = sum(float(result[2]) for result in ocr_result) / len(words)  if ocr_result else 0.0
 
         # Второй проход (развернутое изображение)
         rotated_image_180_cv = cv2.rotate(image_cv, cv2.ROTATE_180)
         ocr_result_180 = self.reader.readtext(rotated_image_180_cv, allowlist=self.allowlist)
         words_180 = [result[1] for result in ocr_result_180]
-        confidence_180 = sum(float(result[2]) for result in ocr_result_180) if ocr_result_180 else 0.0
+        confidence_180 = sum(float(result[2]) for result in ocr_result_180) / len(words_180) if ocr_result_180 else 0.0
 
         # Создаем корректные объекты Pydantic
         return (

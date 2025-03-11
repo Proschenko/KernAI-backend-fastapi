@@ -57,19 +57,8 @@ async def upload_image(file: UploadFile = File(...), username: str = ""):
         raise HTTPException(status_code=500, detail=f"Ошибка при загрузке изображения: {str(e)}")
 
 
-# @router.post("/analyze_img")
-# async def analyze_image(request: schemas.ImgRequest, bg_task: BackgroundTasks, session: AsyncSession = Depends(get_session)):
-#     # logging.info(request)
-#     try:
-#         results = bg_task.add_task(serv.process_image, request)
-#         return {"results": results}
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Ошибка при анализе изображения: {str(e)}")
-
-
-
 @router.post("/analyze_img")
-async def analyze_image(request: schemas.ImgRequest, session: AsyncSession = Depends(get_session)):
+async def analyze_image(request: schemas.ImgRequest):
     """
     Отправляет изображение на фоновую обработку.
     """
