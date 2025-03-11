@@ -1,5 +1,4 @@
 # app/redis_config.py
-
 from celery import Celery
 from redis import Redis
 
@@ -9,9 +8,9 @@ celery_app = Celery(
     "worker",
     broker="redis://localhost:6379/0",
     backend="redis://localhost:6379/0",
-    include=["app.tasks"]  # Добавляем модуль с задачами
+    include=["app.utils.celary.tasks"]  # Добавляем модуль с задачами
 )
-
+#TODO: Переделать для Linux
 celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
@@ -19,7 +18,7 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     worker_pool = 'solo',
-    task_routes={
-        'app.tasks.process_image_task': {'queue': 'celery'},
-    }
+    # task_routes={
+    #     'app.tasks.process_image_task': {'queue': 'celery'},
+    # }
 )

@@ -6,7 +6,7 @@ from .database import get_session
 from . import schemas as schemas
 from . import service as serv
 from typing import List
-from app.redis_config import celery_app
+from app.utils.celary.redis_config import celery_app
 from celery.result import AsyncResult
 
 

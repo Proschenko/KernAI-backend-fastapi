@@ -23,7 +23,7 @@ docker run --name KernAI-redis-server -d -p 6379:6379 -v redis_data:/data redis
 
 4. Запуск Celary в отдельной консоли
 ```
-celery -A app.redis_config.celery_app worker --loglevel=info
+celery -A app.utils.celary.redis_config.celery_app worker --loglevel=info 
 ```
 
 5. Запуск приложения в отдельной консоли

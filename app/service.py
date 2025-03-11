@@ -11,7 +11,7 @@ from PIL import Image
 import uuid
 import logging
 
-from .redis_config import redis_client
+from .utils.celary.redis_config import redis_client
 from .schemas import LaboratoriesResponse, KernsResponse, KernDetailsResponse, CommentResponse, ImgRequest, ImgResponse, ImageProcessingResult
 from .utils.ImageOperation import ImageOperation
 from .utils.KernDetection import KernDetection
