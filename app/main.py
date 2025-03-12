@@ -53,3 +53,4 @@ app.include_router(router)
 logging.info("FastAPI приложение успешно запущено.")
 #запуск приложения:
 # uvicorn app.main:app --reload
+# celery -A app.utils.celary.redis_config.celery_app worker --loglevel=info 

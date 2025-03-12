@@ -6,7 +6,7 @@ from .database import get_session
 from . import schemas as schemas
 from . import service as serv
 from typing import List
-from app.redis_config import celery_app
+from app.utils.celary.redis_config import celery_app
 from celery.result import AsyncResult
 from app.utils.auth import decode_token, check_role
 from uuid import UUID
@@ -101,19 +101,8 @@ async def upload_image(file: UploadFile = File(...), username: str = ""):
         raise HTTPException(status_code=500, detail=f"Ошибка при загрузке изображения: {str(e)}")
 
 
-# @router.post("/analyze_img")
-# async def analyze_image(request: schemas.ImgRequest, bg_task: BackgroundTasks, session: AsyncSession = Depends(get_session)):
-#     # logging.info(request)
-#     try:
-#         results = bg_task.add_task(serv.process_image, request)
-#         return {"results": results}
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Ошибка при анализе изображения: {str(e)}")
-
-
-
 @router.post("/analyze_img")
-async def analyze_image(request: schemas.ImgRequest, session: AsyncSession = Depends(get_session)):
+async def analyze_image(request: schemas.ImgRequest):
     """
     Отправляет изображение на фоновую обработку.
     """
