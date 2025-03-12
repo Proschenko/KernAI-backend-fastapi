@@ -15,7 +15,7 @@ from .utils.celary.redis_config import redis_client
 from .schemas import LaboratoriesResponse, KernsResponse, KernDetailsResponse, CommentResponse, ImgRequest, ImgResponse, ImageProcessingResult
 from .utils.ImageOperation import ImageOperation
 from .utils.KernDetection import KernDetection
-from .utils.TextRecognition import EasyOCRTextRecognition, OCRResultSelector
+from .utils.TextRecognition import EasyOCRTextRecognition, OCRResultSelector, draw_predictions
 
 
 async def get_labs(session: AsyncSession) -> List[LaboratoriesResponse]:
@@ -199,11 +199,15 @@ class ImagePipelineModel:
             # Получаем два варианта результата OCR
             ocr_result_1, ocr_result_2 = self.text_recognition.recognize_text(img)
 
+            draw_predictions(img, (ocr_result_1, ocr_result_2), step6_folder)
+
             # Выбираем наилучший вариант
             best_result = ocr_selector.select_best_text(ocr_result_1, ocr_result_2)
 
+            draw_predictions(img, best_result, step6_folder)
+
             results.append(ImageProcessingResult(
-                model_confidence=best_result.ocr_result.confidence_ocr, # тут уверенность модели
+                model_confidence=best_result.ocr_result.confidence_text_ocr, # тут уверенность модели
                 predicted_text=best_result.ocr_result.text_ocr, # тут текст, который предсказала модель
                 algorithm_text=best_result.text_algoritm, # тут наиболее похожий текст по мнению алгоритма
                 cropped_path=cropped_paths[idx] if idx < len(cropped_paths) else "",
