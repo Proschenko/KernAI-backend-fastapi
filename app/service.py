@@ -199,12 +199,12 @@ class ImagePipelineModel:
             # Получаем два варианта результата OCR
             ocr_result_1, ocr_result_2 = self.text_recognition.recognize_text(img)
 
-            draw_predictions(img, (ocr_result_1, ocr_result_2), step6_folder)
+            draw_predictions((ocr_result_1, ocr_result_2), step6_folder)
 
             # Выбираем наилучший вариант
             best_result = ocr_selector.select_best_text(ocr_result_1, ocr_result_2)
 
-            draw_predictions(img, best_result, step6_folder)
+            draw_predictions(best_result, step6_folder)
 
             results.append(ImageProcessingResult(
                 model_confidence=best_result.ocr_result.confidence_text_ocr, # тут уверенность модели
@@ -223,16 +223,3 @@ class ImagePipelineModel:
             download_date=datetime.now().isoformat(),
             processing_results=results
         )
-
-
-    
-
-if __name__ == "__main__":
-    img_req = ImgRequest(
-        image_path="D:\\я у мамы программист\\Diplom\\datasets\\1 source images\\0007.jpg",
-        username="user_example",
-        codes=[],  # Здесь нужно передать список или оставить пустым
-        lab_id="cd4f237c-bd89-40d2-b983-05ffcd436b60"  # Пример, если это ID лаборатории
-    )
-    print(process_image(img_req))
-

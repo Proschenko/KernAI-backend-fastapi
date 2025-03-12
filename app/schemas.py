@@ -1,8 +1,9 @@
 # app/schemas.py
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from uuid import UUID
 from datetime import date, datetime
 from typing import List, Tuple
+import numpy as np
 
 #region inner project schemas
 class ImageProcessingResult(BaseModel):
@@ -14,6 +15,8 @@ class ImageProcessingResult(BaseModel):
 
 class OCRResult(BaseModel):
     """Схема возврата данных после распознавания текста."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    image: np.array # Изображение в формате NumPy
     bbox_ocr: List[Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]]]  # Координаты bbox [(top_left, top_right, bottom_right, bottom_left)]
     text_ocr: str  # Полный текст
     confidence_text_ocr: float  # Уверенность модели
