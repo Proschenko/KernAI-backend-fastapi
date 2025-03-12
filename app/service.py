@@ -10,13 +10,32 @@ from tqdm import tqdm
 from PIL import Image
 import uuid
 import logging
-
 from .utils.celary.redis_config import redis_client
-from .schemas import LaboratoriesResponse, KernsResponse, KernDetailsResponse, CommentResponse, ImgRequest, ImgResponse, ImageProcessingResult
+from uuid import UUID
+from .schemas import (LaboratoriesResponse, KernsResponse, KernDetailsResponse, CommentResponse,
+                       ImgRequest, ImgResponse, ImageProcessingResult,CommentCreateRequest)
 from .utils.ImageOperation import ImageOperation
 from .utils.KernDetection import KernDetection
 from .utils.TextRecognition import EasyOCRTextRecognition, OCRResultSelector
 
+
+async def check_and_add_user(session: AsyncSession, username: str) -> UUID:
+    """Проверяет, есть ли пользователь в БД, и возвращает его ID. Если нет — добавляет."""
+    query = text("SELECT id FROM users WHERE user_name = :user_name")
+    result = await session.execute(query, {"user_name": username})
+    user = result.fetchone()
+
+    if user:
+        return user[0]  # Возвращаем найденный ID
+
+    insert_query = text("INSERT INTO users (user_name) VALUES (:user_name) RETURNING id")
+    result = await session.execute(insert_query, {"user_name": username})
+    await session.commit()
+    
+    new_user_id = result.fetchone()[0]
+    print(f"Добавлен новый пользователь: {username} (ID: {new_user_id})")
+    
+    return new_user_id  # Возвращаем ID нового пользователя
 
 async def get_labs(session: AsyncSession) -> List[LaboratoriesResponse]:
     query = text("""
@@ -27,6 +46,17 @@ async def get_labs(session: AsyncSession) -> List[LaboratoriesResponse]:
     labs_data = result.fetchall()
     return [LaboratoriesResponse(**row._mapping) for row in labs_data]
 
+async def get_lab_id_by_name(lab_name: str, session: AsyncSession) -> UUID:
+    query = text("""
+        SELECT id
+        FROM public.laboratories
+        WHERE lab_name = :lab_name
+    """)
+    result = await session.execute(query, {"lab_name": lab_name})
+    lab_data = result.fetchone()
+    if lab_data:
+        return lab_data.id
+    return None
 
 async def save_image(file, username: str) -> str:
     try:
@@ -49,8 +79,6 @@ async def save_image(file, username: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при обработке изображения: {str(e)}")
 
-
-
 async def get_kerns(session: AsyncSession) -> List[KernsResponse]:
     query = text("""
         SELECT DISTINCT ON (k.kern_code) 
@@ -72,7 +100,6 @@ async def get_kerns(session: AsyncSession) -> List[KernsResponse]:
     kerns_data = result.fetchall()
 
     return [KernsResponse(**row._mapping) for row in kerns_data]
-
 
 async def get_kern_details(session: AsyncSession, kern_id: str) -> List[KernDetailsResponse]:
     query = text("""
@@ -113,6 +140,55 @@ async def get_kern_comments(session: AsyncSession, kern_id: str) -> List[Comment
     result = await session.execute(query, {"kern_id": kern_id})
     comments = result.fetchall()
     return [CommentResponse(**row._mapping) for row in comments]
+
+async def add_kern_comment(
+    session: AsyncSession, 
+    comment: CommentCreateRequest, 
+    user_id: UUID, 
+    username: str
+) -> CommentResponse:
+    """Добавляет комментарий в БД, используя user_id из токена."""
+
+    # Вставляем комментарий в базу
+    query = text("""
+        INSERT INTO comments (id, insert_date, user_id, kern_id, lab_id, comment_text)
+        VALUES (gen_random_uuid(), :insert_date, :user_id, :kern_id, :lab_id, :comment_text)
+        RETURNING id, insert_date, comment_text, kern_id, lab_id, user_id
+    """)
+
+    params = {
+        "insert_date": datetime.now(),
+        "user_id": user_id,
+        "kern_id": comment.kern_id,
+        "lab_id": comment.lab_id,
+        "comment_text": comment.comment_text
+    }
+
+    result = await session.execute(query, params)
+    new_comment = result.fetchone()
+    await session.commit()
+
+    # Получаем дополнительные данные (имя пользователя, код керна, название лаборатории)
+    query_details = text("""
+        SELECT c.id,
+               c.insert_date,
+               :username as insert_user,  -- Имя передаем напрямую
+               c.comment_text,
+               k.kern_code,
+               l.lab_name
+        FROM comments c
+        JOIN kerns k ON k.id = c.kern_id
+        JOIN laboratories l ON l.id = c.lab_id
+        WHERE c.id = :comment_id
+    """)
+    
+    result_details = await session.execute(query_details, {"comment_id": new_comment.id, "username": username})
+    comment_data = result_details.fetchone()
+
+    return CommentResponse(**comment_data._mapping)
+
+
+
 
 def process_image(request_data: dict):
     """
@@ -219,9 +295,6 @@ class ImagePipelineModel:
             download_date=datetime.now().isoformat(),
             processing_results=results
         )
-
-
-    
 
 if __name__ == "__main__":
     img_req = ImgRequest(

@@ -31,6 +31,11 @@ class KernDetailsResponse(BaseModel):
     kern_code: str
     damage_type: str | None
 
+class CommentCreateRequest(BaseModel):
+    kern_id: UUID
+    comment_text: str
+    lab_id: UUID
+
 class CommentResponse(BaseModel):
     id: UUID
     insert_date: datetime 
