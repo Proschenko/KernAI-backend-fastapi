@@ -7,7 +7,7 @@ from .database import get_session
 from . import schemas as schemas
 from . import service as serv
 from typing import List
-from app.redis_config import celery_app
+from app.utils.celary.redis_config import celery_app
 from celery.result import AsyncResult
 from app.utils.auth import decode_token, check_role
 from uuid import UUID
@@ -88,8 +88,10 @@ async def upload_image(file: UploadFile = File(...), user: dict = Depends(decode
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при загрузке изображения: {str(e)}")
 
+
 @router.post("/analyze_img", tags=["work-with-images"])
-async def analyze_image(request: schemas.ImgRequest, session: AsyncSession = Depends(get_session), user: dict = Depends(decode_token) ):
+async def analyze_image(request: schemas.ImgRequest, user: dict = Depends(decode_token) ):
+
     """
     Отправляет изображение на фоновую обработку.
     """
