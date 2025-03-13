@@ -36,7 +36,7 @@ async def decode_token(
             raise HTTPException(status_code=401, detail="Invalid token")
         
         #username = user_info.get("preferred_username", "Unknown User")
-        email = user_info.get("email", "No Email")
+        email = user_info.get("email", "No Email") # !Имя пользователя и есть его почта!
         # Получаем ID пользователя (если нет, то создаем)
         user_id = await serv.check_and_add_user(session, username=email)
 

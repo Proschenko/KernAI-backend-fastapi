@@ -58,13 +58,13 @@ async def get_lab_id_by_name(lab_name: str, session: AsyncSession) -> UUID:
         return lab_data.id
     return None
 
-async def save_image(file, username: str) -> str:
+async def save_image(file, username: str) -> dict:
     try:
         # Проверка типа файла (например, только изображение)
         if not file.content_type.startswith("image/"):
             raise HTTPException(status_code=400, detail="Только изображения могут быть загружены.")
         if (username is None) or (len(username) == 0):
-            username = "non_auth_user"
+            raise HTTPException(status_code=500, detail=f"Имя пользователя не может быть пустым {str(e)}")
 
         # Путь для сохранения файла (директория пользователя)
         user_dir = os.path.join("temp", username)
@@ -74,8 +74,9 @@ async def save_image(file, username: str) -> str:
         # Сохранение файла на сервер
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-
-        return file_path
+        party_id = uuid.uuid4()
+        party_id_str = str(party_id)
+        return {"file_path":file_path, "party_id": party_id_str}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при обработке изображения: {str(e)}")
 
@@ -187,9 +188,6 @@ async def add_kern_comment(
 
     return CommentResponse(**comment_data._mapping)
 
-
-
-
 def process_image(request_data: dict):
     """
     Выполняет обработку изображения через ImagePipelineModel.
@@ -208,13 +206,11 @@ def process_image(request_data: dict):
     result = model.execute_pipeline()
     return result.model_dump()  # Возвращаем JSON-словарь для корректной работы с Celery
 
-
 async def get_queue_size():
     return redis_client.llen("celery")  # Возвращает количество задач в очереди
 
-
 class ImagePipelineModel:
-    def __init__(self, request: ImgRequest, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
+    def __init__(self, request, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
         party_uuid = uuid.uuid4()
         self.request = request
         self.image = Image.open(request.image_path)
@@ -291,7 +287,7 @@ class ImagePipelineModel:
             ))
 
         return ImgResponse(
-            user_name=self.request.user_name,
+            user_name="",
             codes=self.request.codes,
             lab_id=self.request.lab_id,  # Заглушка, замени на реальный ID
             insert_date=start_time,
