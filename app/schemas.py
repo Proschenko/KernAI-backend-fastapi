@@ -9,12 +9,6 @@ class LaboratoriesResponse(BaseModel):
     id: UUID
     lab_name: str
 
-class ImgRequest(BaseModel):
-    user_name: str 
-    image_path: str
-    codes: List[str]
-    lab_id: UUID
-
 class KernsResponse(BaseModel):
     id: UUID
     kern_code: str
@@ -43,6 +37,12 @@ class CommentResponse(BaseModel):
     comment_text: str 
     kern_code: str
     lab_name: str
+
+class ImgRequest(BaseModel):
+    party_id : UUID
+    image_path: str
+    codes: List[str]
+    lab_id: UUID
 
 class ImageProcessingResult(BaseModel):
     model_confidence: float  # Уверенность модели распознавания текста
