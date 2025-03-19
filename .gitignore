@@ -8,3 +8,4 @@ temp_output/
 /app.log
 tests/__pycache__
 tests/integration/__pycache__
+/app/utils/celary/__pycache__

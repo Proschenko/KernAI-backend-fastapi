@@ -21,7 +21,7 @@ keycloak_openid = KeycloakOpenID(
     client_secret_key=KEYCLOAK_CLIENT_SECRET
 )
 
-# Используем HTTP Bearer вместо OAuth2
+# Используем  Bearer
 security = HTTPBearer()
 
 async def decode_token(

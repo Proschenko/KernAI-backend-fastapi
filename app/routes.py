@@ -14,7 +14,7 @@ from uuid import UUID
 import os
 
 router = APIRouter()
-BASE_IMAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_IMAGE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 #TODO Удалить после тестирования а также защитить все API
 # 🔒 Доступ только для пользователей с ролью "admin"
@@ -94,7 +94,7 @@ async def analyze_image(request: schemas.ImgRequest, user: dict = Depends(decode
 
     """
     Отправляет изображение на фоновую обработку.
-    """
+    """ 
     try:
         request_data = request.model_dump()
         request_data["user_name"] = user["username"]  # Добавляем username
@@ -128,9 +128,8 @@ async def get_queue_size():
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @router.get("/get_image", tags=["work-with-images"])
-async def get_image(path: str = Query(..., description="Путь к изображению")):
+async def get_image(path: str, user: dict = Depends(decode_token)):
     file_path = os.path.join(BASE_IMAGE_DIR, path)
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Файл не найден")
-
+        raise HTTPException(status_code=404, detail=f"Файл не найден {file_path}")
     return FileResponse(file_path)

@@ -10,6 +10,7 @@ class ImageProcessingResult(BaseModel):
     model_confidence: float  # Уверенность модели распознавания текста
     predicted_text: str  # Распознанный текст
     algorithm_text: str | None  # Лучшее совпадение с ведомостью | NONE
+    kern_code: str | None  # копия algorithm_text, которая привязывается к виджету на frontend части
     cropped_path: str # Путь к обрезанному изображению
     rotated_path: str # Путь к повернутому изображению
 
@@ -27,6 +28,13 @@ class OCRResultSelectorAlgotitm(BaseModel):
     """Схема возврата данных после выбора наиболее похожего кода из ведомости."""
     ocr_result: OCRResult
     text_algoritm: str | None
+
+class ImgRequestOutter(BaseModel):
+    user_name: str  
+    party_id : UUID
+    image_path: str
+    codes: List[str]
+    lab_id: UUID
 #endregion
 
 

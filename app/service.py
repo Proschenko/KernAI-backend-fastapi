@@ -13,7 +13,7 @@ import logging
 from .utils.celary.redis_config import redis_client
 from uuid import UUID
 from .schemas import (LaboratoriesResponse, KernsResponse, KernDetailsResponse, CommentResponse,
-                       ImgRequest, ImgResponse, ImageProcessingResult,CommentCreateRequest)
+                       ImgRequest, ImgResponse, ImageProcessingResult,CommentCreateRequest, ImgRequestOutter)
 from .utils.ImageOperation import ImageOperation
 from .utils.KernDetection import KernDetection
 from .utils.TextRecognition import EasyOCRTextRecognition, OCRResultSelector, draw_predictions
@@ -60,23 +60,34 @@ async def get_lab_id_by_name(lab_name: str, session: AsyncSession) -> UUID:
 
 async def save_image(file, username: str) -> dict:
     try:
-        # Проверка типа файла (например, только изображение)
+        # Проверка типа файла (только изображения)
         if not file.content_type.startswith("image/"):
             raise HTTPException(status_code=400, detail="Только изображения могут быть загружены.")
-        if (username is None) or (len(username) == 0):
-            raise HTTPException(status_code=500, detail=f"Имя пользователя не может быть пустым {str(e)}")
+        
+        if not username:
+            raise HTTPException(status_code=400, detail="Имя пользователя не может быть пустым.")
 
-        # Путь для сохранения файла (директория пользователя)
-        user_dir = os.path.join("temp", username)
-        os.makedirs(user_dir, exist_ok=True)
-        file_path = os.path.join(user_dir, file.filename)
-
-        # Сохранение файла на сервер
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Генерация уникального идентификатора
         party_id = uuid.uuid4()
         party_id_str = str(party_id)
-        return {"file_path":file_path, "party_id": party_id_str}
+
+        # Определение структуры папок
+        base_dir = os.path.join("temp", username, f"party_{party_id_str}", "inner_img")
+        os.makedirs(base_dir, exist_ok=True)
+
+        # Получение расширения оригинального файла
+        _, ext = os.path.splitext(file.filename)
+        new_filename = f"{party_id_str}{ext}"
+
+        # Полный путь для сохранения
+        file_path = os.path.join(base_dir, new_filename)
+
+        # Сохранение файла
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        return {"file_path": file_path, "party_id": party_id_str}
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при обработке изображения: {str(e)}")
 
@@ -195,7 +206,7 @@ def process_image(request_data: dict):
     :param request_data: Данные запроса в формате словаря (так как Celery не поддерживает Pydantic-объекты)
     :return: Результат обработки в виде JSON-словаря
     """
-    request = ImgRequest(**request_data)  # Преобразуем словарь в объект Pydantic
+    request = ImgRequestOutter(**request_data) # Преобразуем словарь в объект Pydantic
 
     model = ImagePipelineModel(
         request=request,
@@ -210,11 +221,10 @@ async def get_queue_size():
     return redis_client.llen("celery")  # Возвращает количество задач в очереди
 
 class ImagePipelineModel:
-    def __init__(self, request, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
-        party_uuid = uuid.uuid4()
+    def __init__(self, request: ImgRequestOutter, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
         self.request = request
         self.image = Image.open(request.image_path)
-        self.output_folder = f"temp\\{str(request.user_name)}\\party_{str(party_uuid)}"
+        self.output_folder = f"temp\\{str(request.user_name)}\\party_{str(request.party_id)}"
         self.model_path_kern_detection = yolo_model_path_kern_detection
         self.model_path_text_detection = yolo_model_path_text_detection
         self.image_processing = ImageOperation()
@@ -238,7 +248,7 @@ class ImagePipelineModel:
         step1_folder = os.path.join(self.output_folder, 'step1_crop_kern')
         os.makedirs(step1_folder, exist_ok=True)
         cropped_images = self.kern_detection.crop_kern_with_obb_predictions(self.image, step1_folder)
-        cropped_paths = [os.path.join(self.output_folder, f"crop_{i}.png") for i in range(len(cropped_images))]
+        cropped_paths = [os.path.join(step1_folder, f"kern_{i+1}.png") for i in range(len(cropped_images))]
         
         # Шаг 2: Обработка белых углов
         step2_folder = os.path.join(self.output_folder, 'step2_white_corners')
@@ -259,7 +269,7 @@ class ImagePipelineModel:
         step5_folder = os.path.join(self.output_folder, 'step5_rotate_image')
         os.makedirs(step5_folder, exist_ok=True)
         rotated_images = [self.kern_text_detection.image_rotated_with_obb_predictions(img, step5_folder) for img in tqdm(clustered_images, desc="Поворот изображений")]
-        rotated_paths = [os.path.join(self.output_folder, f"rotated_{i}.png") for i in range(len(rotated_images))]
+        rotated_paths = [os.path.join(step5_folder, f"process_image_{i+1}.png") for i in range(len(rotated_images))]
         
         # Шаг 6: Распознавание текста
         step6_folder = os.path.join(self.output_folder, 'step6_recognize_text')
@@ -282,16 +292,17 @@ class ImagePipelineModel:
                 model_confidence=best_result.ocr_result.confidence_text_ocr, # тут уверенность модели
                 predicted_text=best_result.ocr_result.text_ocr, # тут текст, который предсказала модель
                 algorithm_text=best_result.text_algoritm, # тут наиболее похожий текст по мнению алгоритма
+                kern_code=best_result.text_algoritm, # копия algorithm_text, которая привязывается к виджету на frontend части
                 cropped_path=cropped_paths[idx] if idx < len(cropped_paths) else "",
                 rotated_path=rotated_paths[idx] if idx < len(rotated_paths) else ""
             ))
 
         return ImgResponse(
-            user_name="",
+            user_name="test-test",
             codes=self.request.codes,
-            lab_id=self.request.lab_id,  # Заглушка, замени на реальный ID
+            lab_id=self.request.lab_id, 
             insert_date=start_time,
-            input_type="Изображение" if not self.request.codes else "Изображение + ведомость",
+            input_type="Изображение" if not self.request.codes else "Изображение + ведомость", #TODO ПЕРЕДЕЛАТЬ НА ТО ЧТО НА ФРОНТЕ ДАЕТСЯ
             download_date=datetime.now().isoformat(),
             processing_results=results
         )

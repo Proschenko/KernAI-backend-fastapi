@@ -197,6 +197,7 @@ class KernDetection:
 
         if not bboxes:
             print("Предсказания не найдены")
+            self.save_image_in_folder(save_folder_path, image_cv)
             return image_cv
 
         # Нахождение предсказания с наибольшей уверенностью
@@ -220,22 +221,39 @@ class KernDetection:
         # Обрезка повернутого изображения обратно до 360x360
         cropped_image = rotated_image[70:430, 70:430]
 
-        if save_folder_path:
-            if not os.path.exists(save_folder_path):
-                os.makedirs(save_folder_path)
+        self.save_image_in_folder(save_folder_path, cropped_image)
+        # if save_folder_path:
+        #     if not os.path.exists(save_folder_path):
+        #         os.makedirs(save_folder_path)
 
-            # Получение списка файлов в папке
-            files = os.listdir(save_folder_path)
+        #     # Получение списка файлов в папке
+        #     files = os.listdir(save_folder_path)
 
-            # Фильтрация файлов, соответствующих базовому имени и расширению
-            base_name = "process_image"  # Вы можете настроить это базовое имя по мере необходимости
-            ext = ".png"  # Вы можете настроить расширение по мере необходимости
+        #     # Фильтрация файлов, соответствующих базовому имени и расширению
+        #     base_name = "process_image"  # Вы можете настроить это базовое имя по мере необходимости
+        #     ext = ".png"  # Вы можете настроить расширение по мере необходимости
 
-            # Создание уникального имени файла
-            output_path = os.path.join(save_folder_path, f"{base_name}_{len(files) + 1}{ext}")
-            cv2.imwrite(output_path, cropped_image)
+        #     # Создание уникального имени файла
+        #     output_path = os.path.join(save_folder_path, f"{base_name}_{len(files) + 1}{ext}")
+        #     cv2.imwrite(output_path, cropped_image)
 
         return cropped_image
+
+    def save_image_in_folder(self, save_folder_path, image):
+        if save_folder_path:
+                if not os.path.exists(save_folder_path):
+                    os.makedirs(save_folder_path)
+
+                # Получение списка файлов в папке
+                files = os.listdir(save_folder_path)
+
+                # Фильтрация файлов, соответствующих базовому имени и расширению
+                base_name = "process_image"  # Вы можете настроить это базовое имя по мере необходимости
+                ext = ".png"  # Вы можете настроить расширение по мере необходимости
+
+                # Создание уникального имени файла
+                output_path = os.path.join(save_folder_path, f"{base_name}_{len(files) + 1}{ext}")
+                cv2.imwrite(output_path, image)
 
 
 if __name__ == "__main__":
