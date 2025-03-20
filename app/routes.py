@@ -133,3 +133,22 @@ async def get_image(path: str, user: dict = Depends(decode_token)):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail=f"Файл не найден {file_path}")
     return FileResponse(file_path)
+
+@router.get("/damages", response_model=List[schemas.DamageResponse], tags=["damages"])
+async def get_damages(session: AsyncSession = Depends(get_session)):
+    try:
+        damages_data = await serv.get_damages(session)
+        return damages_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    
+@router.post("/insert_data", tags=["data"])
+async def insert_data(
+    data: schemas.InsertDataRequest,
+    session: AsyncSession = Depends(get_session),
+    user: dict = Depends(decode_token)):
+    try:
+        result_details = await serv.insert_party_info(session, data)
+        return  result_details #{"detail": "Данные успешно загружены", "status_code": 200}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")

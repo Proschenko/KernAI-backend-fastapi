@@ -13,10 +13,12 @@ import logging
 from .utils.celary.redis_config import redis_client
 from uuid import UUID
 from .schemas import (LaboratoriesResponse, KernsResponse, KernDetailsResponse, CommentResponse,
-                       ImgRequest, ImgResponse, ImageProcessingResult,CommentCreateRequest, ImgRequestOutter)
+                       ImgResponse, ImageProcessingResult,CommentCreateRequest, ImgRequestOutter, DamageResponse,
+                       InsertDataRequest)
 from .utils.ImageOperation import ImageOperation
 from .utils.KernDetection import KernDetection
 from .utils.TextRecognition import EasyOCRTextRecognition, OCRResultSelector, draw_predictions
+
 
 
 async def check_and_add_user(session: AsyncSession, username: str) -> UUID:
@@ -220,6 +222,75 @@ def process_image(request_data: dict):
 async def get_queue_size():
     return redis_client.llen("celery")  # Возвращает количество задач в очереди
 
+async def get_damages(session: AsyncSession) -> List[DamageResponse]:
+    query = text("""
+        SELECT id, damage_type
+        FROM public.damages
+    """)
+
+    result = await session.execute(query)
+    damages_data = result.fetchall()
+    return [DamageResponse(**row._mapping) for row in damages_data]
+
+#region insert_data
+# Настройка логгера
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+async def insert_party_info(session: AsyncSession, data: InsertDataRequest):
+    # Функция вставки партии и кодов из ведомости в базу данных
+    logger.info("Начало вставки данных для партии с ID: %s", data.id_party)
+
+    query = text("""SELECT id, id_party
+                FROM public.kern_party where id_party = :id_party""")
+    result = await session.execute(query, {"id_party": data.id_party}) 
+    party = result.fetchone()
+    if party:
+        logger.warning("Данные по партии с ID %s уже существуют", data.id_party)
+        raise HTTPException(status_code=400, detail="Данные по данной партии уже загружены")
+    else:
+        logger.info("Партия с ID %s не найдена, выполняется вставка", data.id_party)
+        query = text("""INSERT INTO public.kern_party
+            (id_party)
+            VALUES (:id_party)
+            RETURNING id""")
+        result = await session.execute(query, {
+            "id_party": data.id_party
+        })
+        id_party_outter_key = result.fetchone()[0]
+        logger.info("Партия с ID %s успешно добавлена в базу данных", data.id_party)
+
+    # Вставляем коды из data.codes в таблицу kern_party_statements
+    if data.kern_party_statements:
+        logger.info("Начало вставки кодов для партии с ID %s", data.id_party)
+        for code in data.kern_party_statements:
+            query = text("""
+                INSERT INTO public.kern_party_statements (party_id, kern_code_from_statement)
+                VALUES (:party_id, :kern_code_from_statement)
+            """)
+            await session.execute(query, {
+                "party_id": id_party_outter_key,
+                "kern_code_from_statement": code,
+            })
+            logger.info("Код %s успешно добавлен для партии с ID %s", code, data.id_party)
+
+    # Фиксируем изменения в базе данных
+    await session.commit()
+    logger.info("Все изменения для партии с ID %s успешно зафиксированы", data.id_party)
+    return {"detail": "Данные успешно загружены"}
+        
+async def insert_data(session: AsyncSession, data: InsertDataRequest, user_id: str):
+
+    return  insert_party_info(session, data)
+    #return {"detail": "Данные успешно загружены", "status_code": 200}
+
+
+#endregion
 class ImagePipelineModel:
     def __init__(self, request: ImgRequestOutter, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
         self.request = request

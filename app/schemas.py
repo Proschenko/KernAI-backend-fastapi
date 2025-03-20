@@ -35,6 +35,13 @@ class ImgRequestOutter(BaseModel):
     image_path: str
     codes: List[str]
     lab_id: UUID
+class InsertRow(BaseModel):
+    damage_id: UUID | None
+    confidence_model: float
+    code_model: str
+    code_algorithm: str | None
+    kern_code: str
+
 #endregion
 
 
@@ -87,3 +94,15 @@ class ImgResponse(BaseModel):
     input_type: str  # Тип вставки данных
     download_date: datetime  # Время выполнения алгоритма
     processing_results: List[ImageProcessingResult]  # Список результатов обработки
+
+class DamageResponse(BaseModel):
+    id: UUID
+    damage_type: str
+class InsertDataRequest(BaseModel):
+    id_party: UUID
+    kern_party_statements: List[str] = []
+    insert_date: datetime
+    validation_date: datetime
+    lab_id: UUID
+    input_type: str
+    rows: List[InsertRow]
