@@ -22,7 +22,8 @@ BASE_IMAGE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 async def admin_endpoint(user=Depends(check_role("admin"))):  # <-- ВАЖНО: Без вызова (без скобок)
     return {"message": "Welcome, Admin!"}
 
-@router.get("/labs", response_model=List[schemas.LaboratoriesResponse], tags=["labs"])
+#region labs
+@router.get("/get_labs", response_model=List[schemas.LaboratoriesResponse], tags=["labs"])
 async def get_laboratories(session: AsyncSession = Depends(get_session)):
     try:
         # Вызов функции из service.py для получения списка лабораторий 
@@ -31,7 +32,7 @@ async def get_laboratories(session: AsyncSession = Depends(get_session)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
     
-@router.get("/lab_id/{lab_name}", response_model=UUID, tags=["labs"])
+@router.get("/get_labs_id/{lab_name}", response_model=UUID, tags=["labs"])
 async def get_lab_id_by_name(lab_name: str, session: AsyncSession = Depends(get_session)):
     try:
         # Вызов функции из service.py для получения id лаборатории по имени
@@ -41,7 +42,33 @@ async def get_lab_id_by_name(lab_name: str, session: AsyncSession = Depends(get_
         return lab_id
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    
+@router.post("/add_labs", response_model=schemas.LaboratoriesResponse, tags=["labs"])
+async def add_laboratory(
+    lab: schemas.LaboratoriesCreate,
+    session: AsyncSession = Depends(get_session)
+):
+    try:
+        new_lab = await serv.add_lab(session, lab)
+        return new_lab
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
+@router.post("/delete_labs/{lab_id}", tags=["labs"])
+async def delete_laboratory(
+    lab_id: UUID,
+    session: AsyncSession = Depends(get_session)
+):
+    try:
+        await serv.delete_lab(session, lab_id)
+        return {"detail": "Laboratory deleted successfully"}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+#endregion
+
+#region kerns
 @router.get("/kerns", response_model=List[schemas.KernsResponse], tags=["kerns"])
 async def get_kerns_data(session: AsyncSession = Depends(get_session)):
     try:
@@ -78,7 +105,9 @@ async def add_kern_comment(
         return new_comment
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+#endregion
 
+#region work-with-images
 @router.post("/upload_img", tags=["work-with-images"])
 async def upload_image(file: UploadFile = File(...), user: dict = Depends(decode_token)):
     try:
@@ -133,15 +162,43 @@ async def get_image(path: str, user: dict = Depends(decode_token)):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail=f"Файл не найден {file_path}")
     return FileResponse(file_path)
+#endregion
 
-@router.get("/damages", response_model=List[schemas.DamageResponse], tags=["damages"])
+#region damages
+@router.get("/get_damages", response_model=List[schemas.DamageResponse], tags=["damages"])
 async def get_damages(session: AsyncSession = Depends(get_session)):
     try:
         damages_data = await serv.get_damages(session)
         return damages_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
-    
+
+@router.post("/add_damages", response_model=schemas.DamageResponse, tags=["damages"])
+async def add_damage(
+    damage: schemas.DamageCreate,
+    session: AsyncSession = Depends(get_session)
+):
+    try:
+        new_damage = await serv.add_damage(session, damage)
+        return new_damage
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+@router.post("/delete_damage/{damage_id}", tags=["damages"])
+async def delete_damage(
+    damage_id: UUID,
+    session: AsyncSession = Depends(get_session)
+):
+    try:
+        await serv.delete_damage(session, damage_id)
+        return {"detail": "Damage deleted successfully"}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+#endregion
+
+#region data
 @router.post("/insert_data", tags=["data"])
 async def insert_data(
     data: schemas.InsertDataRequest,
@@ -152,3 +209,4 @@ async def insert_data(
         return  result_details #{"detail": "Данные успешно загружены", "status_code": 200}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+#endregion

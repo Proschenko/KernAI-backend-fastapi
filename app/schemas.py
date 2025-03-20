@@ -106,3 +106,21 @@ class InsertDataRequest(BaseModel):
     lab_id: UUID
     input_type: str
     rows: List[InsertRow]
+
+class LaboratoriesCreate(BaseModel):
+    lab_name: str
+
+class LaboratoriesResponse(BaseModel):
+    id: UUID
+    lab_name: str
+
+class DamageCreate(BaseModel):
+    kern_id: UUID
+    damage_type: str
+    description: str
+
+class DamageResponse(BaseModel):
+    id: UUID
+    kern_id: UUID
+    damage_type: str
+    description: str
