@@ -1,24 +1,19 @@
 # app/service.py
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-from datetime import date, datetime
 import os
-import shutil
-from fastapi import HTTPException
-from typing import List
-from tqdm import tqdm
-from PIL import Image
 import uuid
+import shutil
 import logging
-from .utils.celary.redis_config import redis_client
 from uuid import UUID
-from .schemas import (LaboratoriesResponse, KernsResponse, KernDetailsResponse, CommentResponse,
-                       ImgResponse, ImageProcessingResult,CommentCreateRequest, ImgRequestOutter, DamageResponse,
-                       InsertDataRequest)
-from .utils.ImageOperation import ImageOperation
-from .utils.KernDetection import KernDetection
-from .utils.TextRecognition import EasyOCRTextRecognition, OCRResultSelector, draw_predictions
+from typing import List
+from sqlalchemy import text
+from fastapi import HTTPException
+from datetime import date, datetime
+from sqlalchemy.ext.asyncio import AsyncSession
 
+
+from .utils.celary.redis_config import redis_client
+from .schemas import *
+from .utils.ImagePipelineModel import ImagePipelineModel
 
 
 async def check_and_add_user(session: AsyncSession, username: str) -> UUID:
@@ -59,6 +54,24 @@ async def get_lab_id_by_name(lab_name: str, session: AsyncSession) -> UUID:
     if lab_data:
         return lab_data.id
     return None
+
+async def add_lab(session: AsyncSession, lab: LaboratoriesCreate) -> LaboratoriesResponse:
+    query = text("""
+        INSERT INTO laboratories (lab_name)
+        VALUES (:lab_name)
+        RETURNING id, lab_name
+    """)
+    result = await session.execute(query, {"lab_name": lab.lab_name})
+    await session.commit()
+    lab_data = result.fetchone()
+    return LaboratoriesResponse(id=lab_data.id, lab_name=lab_data.lab_name)
+
+async def delete_lab(session: AsyncSession, lab_id: UUID):
+    query = text("DELETE FROM laboratories WHERE id = :lab_id RETURNING id")
+    result = await session.execute(query, {"lab_id": lab_id})
+    await session.commit()
+    if not result.fetchone():
+        raise HTTPException(status_code=404, detail="Laboratory not found")
 
 async def save_image(file, username: str) -> dict:
     try:
@@ -232,6 +245,30 @@ async def get_damages(session: AsyncSession) -> List[DamageResponse]:
     damages_data = result.fetchall()
     return [DamageResponse(**row._mapping) for row in damages_data]
 
+async def add_damage(session: AsyncSession, damage: DamageCreate) -> DamageResponse:
+    query = text("""
+        INSERT INTO damages (kern_id, damage_type, description)
+        VALUES (:kern_id, :damage_type, :description)
+        RETURNING id, kern_id, damage_type, description
+    """)
+    result = await session.execute(query, {
+        "kern_id": damage.kern_id,
+        "damage_type": damage.damage_type,
+        "description": damage.description
+    })
+    await session.commit()
+    damage_data = result.fetchone()
+    return DamageResponse(id=damage_data.id, kern_id=damage_data.kern_id,
+                          damage_type=damage_data.damage_type, description=damage_data.description)
+
+async def delete_damage(session: AsyncSession, damage_id: UUID):
+    query = text("DELETE FROM damages WHERE id = :damage_id RETURNING id")
+    result = await session.execute(query, {"damage_id": damage_id})
+    await session.commit()
+    if not result.fetchone():
+        raise HTTPException(status_code=404, detail="Damage not found")
+
+
 #region insert_data
 # Настройка логгера
 import logging
@@ -291,89 +328,3 @@ async def insert_data(session: AsyncSession, data: InsertDataRequest, user_id: s
 
 
 #endregion
-class ImagePipelineModel:
-    def __init__(self, request: ImgRequestOutter, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
-        self.request = request
-        self.image = Image.open(request.image_path)
-        self.output_folder = f"temp\\{str(request.user_name)}\\party_{str(request.party_id)}"
-        self.model_path_kern_detection = yolo_model_path_kern_detection
-        self.model_path_text_detection = yolo_model_path_text_detection
-        self.image_processing = ImageOperation()
-        self.kern_detection = KernDetection(yolo_model_path_kern_detection)
-        self.kern_text_detection = KernDetection(yolo_model_path_text_detection)
-        model_langs = ['ru']
-        allowlist = '0123456789феспФЕСПeECc-*_.,'
-        self.text_recognition = EasyOCRTextRecognition(model_langs, allowlist)
-
-    def execute_pipeline(self) -> ImgResponse:
-        """
-        Выполняет весь pipeline обработки изображения.
-
-        Возвращает:
-            Список словарей с результатами обработки.
-        """
-        start_time=datetime.now().isoformat()
-        results = []
-        
-        # Шаг 1: Обрезка зерен
-        step1_folder = os.path.join(self.output_folder, 'step1_crop_kern')
-        os.makedirs(step1_folder, exist_ok=True)
-        cropped_images = self.kern_detection.crop_kern_with_obb_predictions(self.image, step1_folder)
-        cropped_paths = [os.path.join(step1_folder, f"kern_{i+1}.png") for i in range(len(cropped_images))]
-        
-        # Шаг 2: Обработка белых углов
-        step2_folder = os.path.join(self.output_folder, 'step2_white_corners')
-        os.makedirs(step2_folder, exist_ok=True)
-        processed_images = [self.image_processing.process_image_white_corners(img, step2_folder) for img in tqdm(cropped_images, desc="Обработка белых углов")]
-        
-        # Шаг 3: Применение CLAHE
-        step3_folder = os.path.join(self.output_folder, 'step3_clahe')
-        os.makedirs(step3_folder, exist_ok=True)
-        clahe_images = [self.image_processing.clahe_processing(img, step3_folder) for img in tqdm(processed_images, desc="Применение CLAHE")]
-        
-        # Шаг 4: Кластеризация
-        step4_folder = os.path.join(self.output_folder, 'step4_cluster_image')
-        os.makedirs(step4_folder, exist_ok=True)
-        clustered_images = [self.image_processing.process_cluster_image(img, save_folder_path=step4_folder) for img in tqdm(clahe_images, desc="Кластеризация")]
-        
-        # Шаг 5: Поворот изображений
-        step5_folder = os.path.join(self.output_folder, 'step5_rotate_image')
-        os.makedirs(step5_folder, exist_ok=True)
-        rotated_images = [self.kern_text_detection.image_rotated_with_obb_predictions(img, step5_folder) for img in tqdm(clustered_images, desc="Поворот изображений")]
-        rotated_paths = [os.path.join(step5_folder, f"process_image_{i+1}.png") for i in range(len(rotated_images))]
-        
-        # Шаг 6: Распознавание текста
-        step6_folder = os.path.join(self.output_folder, 'step6_recognize_text')
-        os.makedirs(step6_folder, exist_ok=True)
-
-        ocr_selector = OCRResultSelector(self.request.codes)
-
-        for idx, img in enumerate(tqdm(rotated_images, desc="Распознавание текста")):
-            # Получаем два варианта результата OCR
-            ocr_result_1, ocr_result_2 = self.text_recognition.recognize_text(img)
-
-            draw_predictions((ocr_result_1, ocr_result_2), step6_folder)
-
-            # Выбираем наилучший вариант
-            best_result = ocr_selector.select_best_text(ocr_result_1, ocr_result_2)
-
-            draw_predictions(best_result, step6_folder)
-
-            results.append(ImageProcessingResult(
-                model_confidence=best_result.ocr_result.confidence_text_ocr, # тут уверенность модели
-                predicted_text=best_result.ocr_result.text_ocr, # тут текст, который предсказала модель
-                algorithm_text=best_result.text_algoritm, # тут наиболее похожий текст по мнению алгоритма
-                kern_code=best_result.text_algoritm, # копия algorithm_text, которая привязывается к виджету на frontend части
-                cropped_path=cropped_paths[idx] if idx < len(cropped_paths) else "",
-                rotated_path=rotated_paths[idx] if idx < len(rotated_paths) else ""
-            ))
-
-        return ImgResponse(
-            user_name="test-test",
-            codes=self.request.codes,
-            lab_id=self.request.lab_id, 
-            insert_date=start_time,
-            input_type="Изображение" if not self.request.codes else "Изображение + ведомость", #TODO ПЕРЕДЕЛАТЬ НА ТО ЧТО НА ФРОНТЕ ДАЕТСЯ
-            download_date=datetime.now().isoformat(),
-            processing_results=results
-        )
