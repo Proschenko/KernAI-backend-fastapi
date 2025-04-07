@@ -115,12 +115,9 @@ class LaboratoriesResponse(BaseModel):
     lab_name: str
 
 class DamageCreate(BaseModel):
-    kern_id: UUID
     damage_type: str
-    description: str
 
 class DamageResponse(BaseModel):
     id: UUID
-    kern_id: UUID
     damage_type: str
-    description: str
+    

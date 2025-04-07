@@ -66,6 +66,21 @@ async def add_lab(session: AsyncSession, lab: LaboratoriesCreate) -> Laboratorie
     lab_data = result.fetchone()
     return LaboratoriesResponse(id=lab_data.id, lab_name=lab_data.lab_name)
 
+async def update_lab(session: AsyncSession, lab_id: UUID, lab: LaboratoriesCreate) -> LaboratoriesResponse:
+    """Обновление лаборатории"""
+    query = text("""
+        UPDATE laboratories
+        SET lab_name = :lab_name
+        WHERE id = :lab_id
+        RETURNING id, lab_name
+    """)
+    result = await session.execute(query, {"lab_name": lab.lab_name, "lab_id": lab_id})
+    await session.commit()
+    lab_data = result.fetchone()
+    if not lab_data:
+        raise HTTPException(status_code=404, detail="Laboratory not found")
+    return LaboratoriesResponse(id=lab_data.id, lab_name=lab_data.lab_name)
+
 async def delete_lab(session: AsyncSession, lab_id: UUID):
     query = text("DELETE FROM laboratories WHERE id = :lab_id RETURNING id")
     result = await session.execute(query, {"lab_id": lab_id})
@@ -247,19 +262,31 @@ async def get_damages(session: AsyncSession) -> List[DamageResponse]:
 
 async def add_damage(session: AsyncSession, damage: DamageCreate) -> DamageResponse:
     query = text("""
-        INSERT INTO damages (kern_id, damage_type, description)
-        VALUES (:kern_id, :damage_type, :description)
-        RETURNING id, kern_id, damage_type, description
+        INSERT INTO damages (damage_type)
+        VALUES (:damage_type)
+        RETURNING id,damage_type
     """)
     result = await session.execute(query, {
-        "kern_id": damage.kern_id,
         "damage_type": damage.damage_type,
-        "description": damage.description
     })
     await session.commit()
     damage_data = result.fetchone()
-    return DamageResponse(id=damage_data.id, kern_id=damage_data.kern_id,
-                          damage_type=damage_data.damage_type, description=damage_data.description)
+    return DamageResponse(id=damage_data.id, damage_type=damage_data.damage_type)
+
+async def update_damage(session: AsyncSession, damage_id: UUID, damage: DamageCreate) -> DamageResponse:
+    """Обновление повреждения"""
+    query = text("""
+        UPDATE damages
+        SET damage_type = :damage_type
+        WHERE id = :damage_id
+        RETURNING id, damage_type
+    """)
+    result = await session.execute(query, {"damage_type": damage.damage_type, "damage_id": damage_id})
+    await session.commit()
+    damage_data = result.fetchone()
+    if not damage_data:
+        raise HTTPException(status_code=404, detail="Damage not found")
+    return DamageResponse(id=damage_data.id, damage_type=damage_data.damage_type)
 
 async def delete_damage(session: AsyncSession, damage_id: UUID):
     query = text("DELETE FROM damages WHERE id = :damage_id RETURNING id")
