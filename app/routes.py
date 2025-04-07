@@ -243,8 +243,8 @@ async def insert_data(
     session: AsyncSession = Depends(get_session),
     user: dict = Depends(decode_token)):
     try:
-        result_details = await serv.insert_party_info(session, data)
-        return  result_details #{"detail": "Данные успешно загружены", "status_code": 200}
+        result_details = await serv.insert_all_data(session = session, data = data, user_id = user["id"])
+        return  result_details 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 #endregion

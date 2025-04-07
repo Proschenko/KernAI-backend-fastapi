@@ -103,6 +103,7 @@ class InsertDataRequest(BaseModel):
     kern_party_statements: List[str] = []
     insert_date: datetime
     validation_date: datetime
+    download_date: datetime  
     lab_id: UUID
     input_type: str
     rows: List[InsertRow]
