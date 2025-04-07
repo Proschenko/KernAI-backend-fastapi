@@ -179,7 +179,7 @@ def draw_predictions(
             text_position_algo = (10, annotated_image.shape[0] - 20)  # Внизу слева
             cv2.putText(
                 annotated_image, f"Algorithm choice: {text_algoritm}",
-                text_position_algo, cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 100, 0), 2  # Синий текст
+                text_position_algo, cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2  # Красный текст
             )
 
         axs[i].imshow(cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB))
