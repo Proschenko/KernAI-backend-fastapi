@@ -73,7 +73,7 @@ class ImagePipelineModel:
             draw_predictions((ocr_result_1, ocr_result_2), step6_folder)
 
             # Выбираем наилучший вариант
-            best_result = ocr_selector.select_best_text(ocr_result_1, ocr_result_2)
+            best_result = ocr_selector.select_best_text_ensemble(ocr_result_1, ocr_result_2)
 
             draw_predictions(best_result, step6_folder)
 
