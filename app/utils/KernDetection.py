@@ -255,6 +255,80 @@ class KernDetection:
                 output_path = os.path.join(save_folder_path, f"{base_name}_{len(files) + 1}{ext}")
                 cv2.imwrite(output_path, image)
 
+    def filter_overlapping_bboxes(self, image, conf_threshold=50, iou_threshold=0.5, visualize=True):
+        results = self.model(image)
+        bboxes, confs, classes, class_names = self.__extract_predictions_obb(results)
+
+        keep = [True] * len(bboxes)
+        overlapped_indices = set()
+
+        def compute_iou(poly1, poly2):
+            """Вычисление IOU двух ориентированных bbox"""
+            poly1_np = np.array(poly1, dtype=np.int32)
+            poly2_np = np.array(poly2, dtype=np.int32)
+
+            img = np.zeros((1000, 1000), dtype=np.uint8)
+            cv2.fillPoly(img, [poly1_np], 1)
+            mask1 = img.copy()
+            img.fill(0)
+            cv2.fillPoly(img, [poly2_np], 1)
+            mask2 = img.copy()
+
+            intersection = np.logical_and(mask1, mask2).sum()
+            union = np.logical_or(mask1, mask2).sum()
+
+            return intersection / union if union != 0 else 0
+
+        for i in range(len(bboxes)):
+            if not keep[i]:
+                continue
+            for j in range(i + 1, len(bboxes)):
+                if not keep[j]:
+                    continue
+                iou = compute_iou(bboxes[i], bboxes[j])
+                if iou > iou_threshold:
+                    if confs[i] >= confs[j]:
+                        keep[j] = False
+                        overlapped_indices.add(j)
+                    else:
+                        keep[i] = False
+                        overlapped_indices.add(i)
+
+        # Отфильтрованные и перекрытые
+        filtered_bboxes = [bboxes[i] for i in range(len(bboxes)) if keep[i] and confs[i] >= conf_threshold]
+        filtered_confs = [confs[i] for i in range(len(bboxes)) if keep[i] and confs[i] >= conf_threshold]
+        filtered_classes = [classes[i] for i in range(len(bboxes)) if keep[i] and confs[i] >= conf_threshold]
+        filtered_class_names = [class_names[i] for i in range(len(bboxes)) if keep[i] and confs[i] >= conf_threshold]
+
+        overlapped_bboxes = [bboxes[i] for i in overlapped_indices]
+
+        if visualize:
+            fig, ax = plt.subplots(1)
+            ax.imshow(image)
+            for bbox in filtered_bboxes:
+                polygon = patches.Polygon(bbox, closed=True, linewidth=2, edgecolor='g', facecolor='none')
+                ax.add_patch(polygon)
+            for bbox in overlapped_bboxes:
+                polygon = patches.Polygon(bbox, closed=True, linewidth=2, edgecolor='r', facecolor='none')
+                ax.add_patch(polygon)
+            plt.axis('off')
+            plt.title("Green: Kept | Red: Overlapped Removed")
+            plt.show()
+
+        return filtered_bboxes, filtered_confs, filtered_classes, filtered_class_names, overlapped_bboxes
+
 
 if __name__ == "__main__":
     pass
+    from PIL import Image
+    # path = r"D:\я у мамы программист\Diplom\KernAI-backend-fastapi\temp\user1\party_fd0c5323-3525-4fb8-8d0c-2090ad0c444c\step4_cluster_image\clustered_image_3.png"
+    # kern_detection = KernDetection(model_path=r"D:\я у мамы программист\Diplom\KernAI-backend-fastapi\models\YOLO_detect_text.pt")
+    path = r"D:\я у мамы программист\Diplom\KernAI-backend-fastapi\temp\user1\party_fd0c5323-3525-4fb8-8d0c-2090ad0c444c\step4_cluster_image\clustered_image_5.png"
+    # kern_detection = KernDetection(model_path=r"D:\я у мамы программист\Diplom\KernAI-backend-fastapi\models\YOLO_detect_text.pt")
+    kern_detection = KernDetection(model_path=r"D:\я у мамы программист\Diplom\KernAI-backend-fastapi\models\YOLO_detect_text.pt")
+    image = Image.open(path)
+    image_cv = cv2.imread(path, cv2.IMREAD_COLOR_RGB)
+    
+    save_path = r"D:\я у мамы программист\Diplom\datasets\2 crop images"
+    kern_detection.visualize_predictions_obb(image_cv, conf_threshold=90)
+    # kern_detection.crop_kern_with_obb_predictions(image, save_folder_path=save_path, conf_threshold=96)
