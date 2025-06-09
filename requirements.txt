@@ -107,3 +107,5 @@ urllib3==2.3.0
 uvicorn==0.34.0
 vine==5.1.0
 wcwidth==0.2.13
+flower==2.0.1
+textdistance==4.6.3
