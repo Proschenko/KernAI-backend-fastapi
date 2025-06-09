@@ -1,0 +1,63 @@
+version: "3.8"
+services:
+    db:
+        image: server:port/postgres:15.3
+        restart: always
+        ports:
+        - "5434:5432"
+        environment:
+            POSTGRES_PASSWORD: password
+        volumes:
+            - ./db/data/:/var/lib/postgresql/data/
+            - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    back:
+        image: server:port/kern-ai-back:0.1
+        command: uvicorn app.main:app
+#        image: server:port/kern-ai-back-torch-mini:0.1
+        environment:
+          - "DATABASE_URL=postgresql+asyncpg://{user_db}:{password_db}@{url}:{port}/{db_name}"
+          - "KEYCLOAK_SERVER_URL=https://your-keycloak-server/auth"
+          - "KEYCLOAK_REALM=your-realm"
+          - "KEYCLOAK_CLIENT_ID=kern-ai-back"
+          - "KEYCLOAK_CLIENT_SECRET=your-client-secret"
+          - "UVICORN_HOST=0.0.0.0"
+          - "UVICORN_PORT=8000"
+        ports:
+        - "8004:8000"
+        volumes:
+          - ./ssl:/ssl/
+          - ./temp:/temp/
+          - ./models:/models/
+    back-celery:
+        image: server:port/kern-ai-back:0.1
+#        image: server:port/kern-ai-back-torch-mini:0.1
+        command: celery -A app.utils.celary.redis_config.celery_app worker --loglevel=INFO
+        environment:
+          - "DATABASE_URL=postgresql+asyncpg://{user_db}:{password_db}@{url}:{port}/{db_name}"
+          - "KEYCLOAK_SERVER_URL=https://your-keycloak-server/auth"
+          - "KEYCLOAK_REALM=your-realm"
+          - "KEYCLOAK_CLIENT_ID=kern-ai-back"
+          - "KEYCLOAK_CLIENT_SECRET=your-client-secret"
+          - "EASYOCR_MODULE_PATH=/models/easyocr"
+        volumes:
+          - ./ssl:/ssl/
+          - ./temp:/temp/
+          - ./models:/models/
+    nginx:
+        image: server:port/kern-ai-front:0.1
+        restart: always
+        ports:
+          - 3001:3001
+        volumes:
+          - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+          - ./ssl:/etc/nginx/ssl/
+#        environment:
+#          - "REACT_APP_KC=https://your-reactapp-server/auth"
+#          - "REACT_APP_REALM=your-realm"
+#          - "REACT_APP_CLIENT=kern-ai-front"
+    redis:
+        image: server:port/redis:7.4.2
+        ports:
+          - "6379:6379"
+        volumes:
+          - ./redis_data:/data
