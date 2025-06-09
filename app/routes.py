@@ -1,6 +1,5 @@
 # app/routes.py
-import logging
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_session
@@ -17,10 +16,15 @@ router = APIRouter()
 BASE_IMAGE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 #TODO Удалить после тестирования а также защитить все API
-# 🔒 Доступ только для пользователей с ролью "admin"
 @router.get("/admin")
-async def admin_endpoint(user=Depends(check_role("admin"))):  # <-- ВАЖНО: Без вызова (без скобок)
-    return {"message": "Welcome, Admin!"}
+async def admin_endpoint(user=Depends(check_role("admin"))):  
+    return {"message": f"Welcome, {user['username']}! You have admin access."}
+
+@router.get("/roles")
+async def get_user_roles(user=Depends(decode_token)):
+    return {
+        "message": f"Your token_decoded: {user['token_decoded']}"
+    }
 
 #region labs
 @router.get("/get_labs", response_model=List[schemas.LaboratoriesResponse], tags=["labs"])
@@ -32,7 +36,7 @@ async def get_laboratories(session: AsyncSession = Depends(get_session)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
     
-@router.get("/get_labs_id/{lab_name}", response_model=UUID, tags=["labs"])
+@router.get("/get_lab_id/{lab_name}", response_model=UUID, tags=["labs"])
 async def get_lab_id_by_name(lab_name: str, session: AsyncSession = Depends(get_session)):
     try:
         # Вызов функции из service.py для получения id лаборатории по имени
@@ -43,10 +47,11 @@ async def get_lab_id_by_name(lab_name: str, session: AsyncSession = Depends(get_
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
     
-@router.post("/add_labs", response_model=schemas.LaboratoriesResponse, tags=["labs"])
+@router.post("/add_lab", response_model=schemas.LaboratoriesResponse, tags=["labs"])
 async def add_laboratory(
     lab: schemas.LaboratoriesCreate,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
+    user=Depends(check_role("admin"))
 ):
     try:
         new_lab = await serv.add_lab(session, lab)
@@ -54,10 +59,27 @@ async def add_laboratory(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
-@router.post("/delete_labs/{lab_id}", tags=["labs"])
+@router.put("/update_lab/{lab_id}", response_model=schemas.LaboratoriesResponse, tags=["labs"])
+async def update_laboratory(
+    lab_id: UUID,
+    lab: schemas.LaboratoriesCreate,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(check_role("admin"))
+):
+    """Обновление информации о лаборатории"""
+    try:
+        updated_lab = await serv.update_lab(session, lab_id, lab)
+        return updated_lab
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+@router.delete("/delete_lab/{lab_id}", tags=["labs"])
 async def delete_laboratory(
     lab_id: UUID,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
+    user=Depends(check_role("admin"))
 ):
     try:
         await serv.delete_lab(session, lab_id)
@@ -173,10 +195,11 @@ async def get_damages(session: AsyncSession = Depends(get_session)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
-@router.post("/add_damages", response_model=schemas.DamageResponse, tags=["damages"])
+@router.post("/add_damage", response_model=schemas.DamageResponse, tags=["damages"])
 async def add_damage(
     damage: schemas.DamageCreate,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
+    user=Depends(check_role("admin"))
 ):
     try:
         new_damage = await serv.add_damage(session, damage)
@@ -184,16 +207,31 @@ async def add_damage(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
-@router.post("/delete_damage/{damage_id}", tags=["damages"])
+@router.put("/update_damage/{damage_id}", response_model=schemas.DamageResponse, tags=["damages"])
+async def update_damage(
+    damage_id: UUID,
+    damage: schemas.DamageCreate,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(check_role("admin"))
+):
+    """Обновление информации о повреждении"""
+    try:
+        updated_damage = await serv.update_damage(session, damage_id, damage)
+        return updated_damage
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+@router.delete("/delete_damage/{damage_id}", tags=["damages"])
 async def delete_damage(
     damage_id: UUID,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
+    user=Depends(check_role("admin"))
 ):
     try:
         await serv.delete_damage(session, damage_id)
         return {"detail": "Damage deleted successfully"}
-    except HTTPException as e:
-        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 #endregion
@@ -205,8 +243,8 @@ async def insert_data(
     session: AsyncSession = Depends(get_session),
     user: dict = Depends(decode_token)):
     try:
-        result_details = await serv.insert_party_info(session, data)
-        return  result_details #{"detail": "Данные успешно загружены", "status_code": 200}
+        result_details = await serv.insert_all_data(session = session, data = data, user_id = user["id"])
+        return  result_details 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 #endregion

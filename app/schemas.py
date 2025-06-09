@@ -103,6 +103,7 @@ class InsertDataRequest(BaseModel):
     kern_party_statements: List[str] = []
     insert_date: datetime
     validation_date: datetime
+    download_date: datetime  
     lab_id: UUID
     input_type: str
     rows: List[InsertRow]
@@ -115,12 +116,9 @@ class LaboratoriesResponse(BaseModel):
     lab_name: str
 
 class DamageCreate(BaseModel):
-    kern_id: UUID
     damage_type: str
-    description: str
 
 class DamageResponse(BaseModel):
     id: UUID
-    kern_id: UUID
     damage_type: str
-    description: str
+    

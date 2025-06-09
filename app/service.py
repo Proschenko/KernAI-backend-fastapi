@@ -9,7 +9,7 @@ from sqlalchemy import text
 from fastapi import HTTPException
 from datetime import date, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy.exc import SQLAlchemyError
 
 from .utils.celary.redis_config import redis_client
 from .schemas import *
@@ -64,6 +64,21 @@ async def add_lab(session: AsyncSession, lab: LaboratoriesCreate) -> Laboratorie
     result = await session.execute(query, {"lab_name": lab.lab_name})
     await session.commit()
     lab_data = result.fetchone()
+    return LaboratoriesResponse(id=lab_data.id, lab_name=lab_data.lab_name)
+
+async def update_lab(session: AsyncSession, lab_id: UUID, lab: LaboratoriesCreate) -> LaboratoriesResponse:
+    """Обновление лаборатории"""
+    query = text("""
+        UPDATE laboratories
+        SET lab_name = :lab_name
+        WHERE id = :lab_id
+        RETURNING id, lab_name
+    """)
+    result = await session.execute(query, {"lab_name": lab.lab_name, "lab_id": lab_id})
+    await session.commit()
+    lab_data = result.fetchone()
+    if not lab_data:
+        raise HTTPException(status_code=404, detail="Laboratory not found")
     return LaboratoriesResponse(id=lab_data.id, lab_name=lab_data.lab_name)
 
 async def delete_lab(session: AsyncSession, lab_id: UUID):
@@ -226,7 +241,7 @@ def process_image(request_data: dict):
     model = ImagePipelineModel(
         request=request,
         yolo_model_path_kern_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt").replace("\\", "/"),
-        yolo_model_path_text_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt").replace("\\", "/")
+        yolo_model_path_text_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_text_v.4.pt").replace("\\", "/")
     )
 
     result = model.execute_pipeline()
@@ -247,19 +262,31 @@ async def get_damages(session: AsyncSession) -> List[DamageResponse]:
 
 async def add_damage(session: AsyncSession, damage: DamageCreate) -> DamageResponse:
     query = text("""
-        INSERT INTO damages (kern_id, damage_type, description)
-        VALUES (:kern_id, :damage_type, :description)
-        RETURNING id, kern_id, damage_type, description
+        INSERT INTO damages (damage_type)
+        VALUES (:damage_type)
+        RETURNING id,damage_type
     """)
     result = await session.execute(query, {
-        "kern_id": damage.kern_id,
         "damage_type": damage.damage_type,
-        "description": damage.description
     })
     await session.commit()
     damage_data = result.fetchone()
-    return DamageResponse(id=damage_data.id, kern_id=damage_data.kern_id,
-                          damage_type=damage_data.damage_type, description=damage_data.description)
+    return DamageResponse(id=damage_data.id, damage_type=damage_data.damage_type)
+
+async def update_damage(session: AsyncSession, damage_id: UUID, damage: DamageCreate) -> DamageResponse:
+    """Обновление повреждения"""
+    query = text("""
+        UPDATE damages
+        SET damage_type = :damage_type
+        WHERE id = :damage_id
+        RETURNING id, damage_type
+    """)
+    result = await session.execute(query, {"damage_type": damage.damage_type, "damage_id": damage_id})
+    await session.commit()
+    damage_data = result.fetchone()
+    if not damage_data:
+        raise HTTPException(status_code=404, detail="Damage not found")
+    return DamageResponse(id=damage_data.id, damage_type=damage_data.damage_type)
 
 async def delete_damage(session: AsyncSession, damage_id: UUID):
     query = text("DELETE FROM damages WHERE id = :damage_id RETURNING id")
@@ -268,10 +295,7 @@ async def delete_damage(session: AsyncSession, damage_id: UUID):
     if not result.fetchone():
         raise HTTPException(status_code=404, detail="Damage not found")
 
-
 #region insert_data
-# Настройка логгера
-import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
@@ -279,52 +303,113 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-async def insert_party_info(session: AsyncSession, data: InsertDataRequest):
-    # Функция вставки партии и кодов из ведомости в базу данных
-    logger.info("Начало вставки данных для партии с ID: %s", data.id_party)
-
-    query = text("""SELECT id, id_party
-                FROM public.kern_party where id_party = :id_party""")
-    result = await session.execute(query, {"id_party": data.id_party}) 
-    party = result.fetchone()
-    if party:
-        logger.warning("Данные по партии с ID %s уже существуют", data.id_party)
-        raise HTTPException(status_code=400, detail="Данные по данной партии уже загружены")
-    else:
-        logger.info("Партия с ID %s не найдена, выполняется вставка", data.id_party)
-        query = text("""INSERT INTO public.kern_party
-            (id_party)
-            VALUES (:id_party)
-            RETURNING id""")
-        result = await session.execute(query, {
-            "id_party": data.id_party
-        })
+async def insert_all_data(session: AsyncSession, data, user_id: str):
+    """
+    Вставка данных в БД, используя новую структуру таблиц.
+    """
+    try:
+        # 1. Проверяем, существует ли уже партия
+        query = text("SELECT id FROM public.kern_party WHERE party_id = :party_id")
+        result = await session.execute(query, {"party_id": data.id_party})
+        party = result.fetchone()
+        
+        if party:
+            logger.warning("Партия %s уже загружена", data.id_party)
+            raise HTTPException(status_code=400, detail="Данные по данной партии уже загружены")
+        
+        # 2. Вставляем новую партию
+        query = text("""
+            INSERT INTO public.kern_party (party_id)
+            VALUES (:party_id)
+            RETURNING id
+        """)
+        result = await session.execute(query, {"party_id": data.id_party})
         id_party_outter_key = result.fetchone()[0]
-        logger.info("Партия с ID %s успешно добавлена в базу данных", data.id_party)
-
-    # Вставляем коды из data.codes в таблицу kern_party_statements
-    if data.kern_party_statements:
-        logger.info("Начало вставки кодов для партии с ID %s", data.id_party)
+        await session.flush()
+        
+        # 3. Вставляем коды ведомости
         for code in data.kern_party_statements:
             query = text("""
                 INSERT INTO public.kern_party_statements (party_id, kern_code_from_statement)
                 VALUES (:party_id, :kern_code_from_statement)
             """)
-            await session.execute(query, {
-                "party_id": id_party_outter_key,
-                "kern_code_from_statement": code,
-            })
-            logger.info("Код %s успешно добавлен для партии с ID %s", code, data.id_party)
-
-    # Фиксируем изменения в базе данных
-    await session.commit()
-    logger.info("Все изменения для партии с ID %s успешно зафиксированы", data.id_party)
-    return {"detail": "Данные успешно загружены"}
+            await session.execute(query, {"party_id": id_party_outter_key, "kern_code_from_statement": code})
         
-async def insert_data(session: AsyncSession, data: InsertDataRequest, user_id: str):
+        # 4. Обрабатываем каждую строку данных
+        for row in data.rows:
+            # 4.1. Проверяем, существует ли kern_code
+            query = text("SELECT id FROM public.kerns WHERE kern_code = :kern_code LIMIT 1")
+            result = await session.execute(query, {"kern_code": row.kern_code})
+            kern = result.fetchone()
+            
+            if kern:
+                kern_id = kern[0]
+            else:
+                query = text("""
+                    INSERT INTO public.kerns (kern_code)
+                    VALUES (:kern_code)
+                    RETURNING id
+                """)
+                result = await session.execute(query, {"kern_code": row.kern_code})
+                kern_id = result.fetchone()[0]
+            
+            # 4.2. Вставляем данные аналитики
+            query = text("""
+                INSERT INTO public.kern_data_analytics (
+                    confidence_model, code_model, code_algorithm, input_type, download_date, validation_date
+                ) VALUES (
+                    :confidence_model, :code_model, :code_algorithm, :input_type, :download_date, :validation_date
+                )
+                RETURNING id
+            """)
+            result = await session.execute(query, {
+                "confidence_model": row.confidence_model,
+                "code_model": row.code_model,
+                "code_algorithm": row.code_algorithm,
+                "input_type": data.input_type,
+                "download_date": data.download_date,
+                "validation_date": data.validation_date
+            })
+            analytic_id = result.fetchone()[0]
+            
+            # 4.3. Вставляем данные кернов
+            query = text("""
+                INSERT INTO public.kern_data (
+                    id_party, user_id, insert_date, lab_id, kern_id, damage_id, analytic_id
+                ) VALUES (
+                    :id_party, :user_id, :insert_date, :lab_id, :kern_id, :damage_id, :analytic_id
+                )
+            """)
+            await session.execute(query, {
+                "id_party": id_party_outter_key,
+                "user_id": user_id,
+                "insert_date": data.insert_date,
+                "lab_id": data.lab_id,
+                "kern_id": kern_id,
+                "damage_id": row.damage_id,
+                "analytic_id": analytic_id
+            })
+        
+        await session.commit()
+        logger.info("Все данные успешно загружены")
+        return {"detail": "Данные успешно загружены"}
+    except SQLAlchemyError as e:
+        await session.rollback()
+        logger.error("Ошибка при вставке данных: %s", str(e))
+        raise HTTPException(status_code=500, detail="Ошибка при вставке данных")
 
-    return  insert_party_info(session, data)
-    #return {"detail": "Данные успешно загружены", "status_code": 200}
 
+# if __name__ == "__main__":
+#     request = {
+#         "user_name": "user1",
+#         "image_path": "D:\Diplom\datasets\1 source images\0052.jpeg",
+#         "codes": [],
+#         "lab_id": ""
+#                } # Написать запрос
+#     model = ImagePipelineModel(
+#         request=request,
+#         yolo_model_path_kern_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt").replace("\\", "/"),
+#         yolo_model_path_text_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_text_v.2.pt").replace("\\", "/")
+#     )
 
-#endregion
+#     result = model.execute_pipeline()

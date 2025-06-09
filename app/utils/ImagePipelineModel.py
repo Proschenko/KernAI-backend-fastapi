@@ -3,9 +3,11 @@ import os
 from PIL import Image
 from tqdm import tqdm
 from datetime import date, datetime
+# from celery import shared_task # TODO: ckeck progress recorder
+# from celery_progress.backend import ProgressRecorder
 
 from ..schemas import ImgRequestOutter, ImgResponse, ImageProcessingResult
-from .KernDetection import KernDetection
+from .KernDetection import YOLODetection
 from .ImageOperation import ImageOperation
 from .TextRecognition import EasyOCRTextRecognition, OCRResultSelector, draw_predictions
 
@@ -13,12 +15,12 @@ class ImagePipelineModel:
     def __init__(self, request: ImgRequestOutter, yolo_model_path_kern_detection: str, yolo_model_path_text_detection: str):
         self.request = request
         self.image = Image.open(request.image_path)
-        self.output_folder = f"temp\\{str(request.user_name)}\\party_{str(request.party_id)}"
+        self.output_folder = f"temp/{str(request.user_name)}/party_{str(request.party_id)}"
         self.model_path_kern_detection = yolo_model_path_kern_detection
         self.model_path_text_detection = yolo_model_path_text_detection
         self.image_processing = ImageOperation()
-        self.kern_detection = KernDetection(yolo_model_path_kern_detection)
-        self.kern_text_detection = KernDetection(yolo_model_path_text_detection)
+        self.kern_detection = YOLODetection(yolo_model_path_kern_detection)
+        self.kern_text_detection = YOLODetection(yolo_model_path_text_detection)
         model_langs = ['ru']
         allowlist = '0123456789феспФЕСПeECc-*_.,'
         self.text_recognition = EasyOCRTextRecognition(model_langs, allowlist)
@@ -32,14 +34,15 @@ class ImagePipelineModel:
         """
         start_time=datetime.now().isoformat()
         results = []
+        # progress_recorder = ProgressRecorder(self)
         
-        # Шаг 1: Обрезка зерен
+        # Шаг 1: Детекция керна
         step1_folder = os.path.join(self.output_folder, 'step1_crop_kern')
         os.makedirs(step1_folder, exist_ok=True)
-        cropped_images = self.kern_detection.crop_kern_with_obb_predictions(self.image, step1_folder)
+        cropped_images, _ = self.kern_detection.crop_object_with_obb_predictions(self.image, step1_folder)
         cropped_paths = [os.path.join(step1_folder, f"kern_{i+1}.png") for i in range(len(cropped_images))]
         
-        # Шаг 2: Обработка белых углов
+        # Шаг 2: Фильтрация шума по вписанной окружности
         step2_folder = os.path.join(self.output_folder, 'step2_white_corners')
         os.makedirs(step2_folder, exist_ok=True)
         processed_images = [self.image_processing.process_image_white_corners(img, step2_folder) for img in tqdm(cropped_images, desc="Обработка белых углов")]
@@ -58,17 +61,17 @@ class ImagePipelineModel:
         step5_folder = os.path.join(self.output_folder, 'step5_rotate_image')
         os.makedirs(step5_folder, exist_ok=True)
         rotated_images = [self.kern_text_detection.image_rotated_with_obb_predictions(img, step5_folder) for img in tqdm(clustered_images, desc="Поворот изображений")]
-        rotated_paths = [os.path.join(step5_folder, f"process_image_{i+1}.png") for i in range(len(rotated_images))]
         
         # Шаг 6: Распознавание текста
         step6_folder = os.path.join(self.output_folder, 'step6_recognize_text')
         os.makedirs(step6_folder, exist_ok=True)
 
         ocr_selector = OCRResultSelector(self.request.codes)
+        rotated_paths = [os.path.join(step6_folder, "one_image", f"rotated_text_image_{i+1}.png") for i in range(len(rotated_images))]
 
         for idx, img in enumerate(tqdm(rotated_images, desc="Распознавание текста")):
             # Получаем два варианта результата OCR
-            ocr_result_1, ocr_result_2 = self.text_recognition.recognize_text(img)
+            ocr_result_1, ocr_result_2 = self.text_recognition.recognize_text(img, text_detection=self.kern_text_detection, output_folder=step6_folder)
 
             draw_predictions((ocr_result_1, ocr_result_2), step6_folder)
 
@@ -91,7 +94,7 @@ class ImagePipelineModel:
             codes=self.request.codes,
             lab_id=self.request.lab_id, 
             insert_date=start_time,
-            input_type="Изображение" if not self.request.codes else "Изображение + ведомость", #TODO ПЕРЕДЕЛАТЬ НА ТО ЧТО НА ФРОНТЕ ДАЕТСЯ
+            input_type="Изображение" if not self.request.codes else "Изображение + ведомость",
             download_date=datetime.now().isoformat(),
             processing_results=results
         )
