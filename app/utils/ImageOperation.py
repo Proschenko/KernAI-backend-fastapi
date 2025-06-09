@@ -218,22 +218,3 @@ class ImageOperation:
             clustered_image.save(clustered_image_path)
 
         return clustered_image
-
-
-if __name__ == "__main__":
-    # Пример использования
-    image_operation = ImageOperation()
-    image = Image.open('path_to_your_image.jpg')
-
-    # Пример использования метода process_image_white_corners
-    processed_image_1 = image_operation.process_image_white_corners(image,
-                                                                    save_folder_path='path_to_save_processed_image')
-    processed_image_1.show()  # Показать обработанное изображение
-
-    # Пример использования метода plot_brightness_histogram
-    peak_brightness = image_operation.plot_brightness_histogram(image, show=True)
-
-    # Пример использования метода process_image_white_by_brightness_peak
-    processed_image_2 = image_operation.process_image_white_by_brightness_peak(image, peak_brightness, tolerance=30,
-                                                                               output_folder='path_to_save_processed_image')
-    processed_image_2.show()  # Показать обработанное изображение

@@ -4,25 +4,14 @@ import easyocr
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-from abc import ABC, abstractmethod
 from typing import List, Tuple, Union
 from ..schemas import OCRResult, OCRResultSelectorAlgotitm
+from .KernDetection import YOLODetection
 from difflib import SequenceMatcher
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import textdistance
 from collections import Counter
-
-class TextRecognitionBase(ABC):
-    """Абстрактный класс для распознавания текста."""
-    @abstractmethod
-    def __init__(self, model_langs: List[str], allowlist: str):
-        pass
-
-    @abstractmethod
-    def recognize_text(self, image: Image.Image) -> Tuple[OCRResult, OCRResult]:
-        """Распознает текст и возвращает два возможных результата."""
-        pass
 
 
 class EasyOCRTextRecognition:
@@ -30,39 +19,76 @@ class EasyOCRTextRecognition:
         self.reader = easyocr.Reader(model_langs, gpu=False)
         self.allowlist = allowlist
 
-    def recognize_text(self, image: Image.Image) -> Tuple[OCRResult, OCRResult]:
+    def recognize_text(self, image: Image.Image, text_detection: YOLODetection=None, output_folder: str=r"D:\Diplom\KernAI\KernAI-back-fastapi-celery\temp\test_user\party_test_party") -> Tuple[OCRResult, OCRResult]:
         """Распознает текст и возвращает два возможных результата."""
+        image = Image.fromarray(image)
+        bboxes = []
+        words = []
+        confidences_words = []
+        confidence_texts = []
 
-        # Первый проход OCR
+        bboxes_180 = []
+        words_180 = []
+        confidences_words_180 = []
+        confidence_texts_180 = []
+
+        # save crop text
+        step6_folder_crop_image = os.path.join(str(output_folder), 'crop_text_image')
+        os.makedirs(step6_folder_crop_image, exist_ok=True)
+
         image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        ocr_result = self.reader.readtext(image_cv, allowlist=self.allowlist)
-        bbox = [result[0] for result in ocr_result]
-        words = [result[1] for result in ocr_result]
-        confidences_words = [float(result[2]) for result in ocr_result]
-        confidence_text = sum(confidences_words) / len(confidences_words) if confidences_words else 0.0
+        image_cv_180 = cv2.rotate(image_cv, cv2.ROTATE_180)
+        # text_detection.visualize_predictions_obb(image, conf_threshold=50)
+        crop_images, crop_bboxes = text_detection.crop_object_with_obb_predictions(image, conf_threshold=50, save_folder_path=step6_folder_crop_image)
+        # print(*crop_images, sep="\n", end="\n\n\n")
+        # print(*crop_bboxes, sep="\n", end="\n\n\n")
 
-        # Второй проход (развернутое изображение)
-        rotated_image_180_cv = cv2.rotate(image_cv, cv2.ROTATE_180)
-        ocr_result_180 = self.reader.readtext(rotated_image_180_cv, allowlist=self.allowlist)
-        bbox_180 = [result[0] for result in ocr_result_180]
-        words_180 = [result[1] for result in ocr_result_180]
-        confidences_words_180 = [float(result[2]) for result in ocr_result_180]
-        confidence_text_180 = sum(confidences_words_180) / len(confidences_words_180) if confidences_words_180 else 0.0
+        sorted_images_with_bboxes = text_detection.sort_bboxes_top_to_bottom(crop_images, crop_bboxes)
+        sort_crop_images = [[item[0] for item in crop_image_with_bbox] for crop_image_with_bbox in sorted_images_with_bboxes] 
+        sort_crop_bboxes = [[item[1] for item in crop_image_with_bbox] for crop_image_with_bbox in sorted_images_with_bboxes] 
+        # print(sort_crop_images, sep="\n", end="\n\n\n")
+        # print(*sort_crop_bboxes, sep="\n", end="\n\n\n")
+
+        for crop_image, bbox in zip(sort_crop_images, sort_crop_bboxes):
+            # Первый проход OCR
+            crop_image_cv = cv2.cvtColor(np.array(crop_image[0]), cv2.COLOR_RGB2BGR)
+            ocr_result = self.reader.readtext(crop_image_cv, allowlist=self.allowlist)
+
+            bbox = tuple(tuple([float((round(coord[0], 2))), float(round(coord[1], 2))]) for coord in bbox[0])
+            bboxes.append(bbox)
+            words.extend([result[1] for result in ocr_result])
+            confidences_words.extend([float(result[2]) for result in ocr_result])
+            confidence_texts.append((sum(confidences_words) / len(confidences_words)) if confidences_words else 0.0)
+
+            # Второй проход (развернутое изображение)
+            crop_rotated_image_180_cv = cv2.rotate(crop_image_cv, cv2.ROTATE_180)
+            ocr_result_180 = self.reader.readtext(crop_rotated_image_180_cv, allowlist=self.allowlist)
+
+            bbox_rotated_180 = text_detection.flip_bbox_180(bbox, image.width, image.height)
+            bboxes_180.append(bbox_rotated_180)
+            words_180.extend([result[1] for result in ocr_result_180])
+            confidences_words_180.extend([float(result[2]) for result in ocr_result_180])
+            confidence_texts_180.append((sum(confidences_words_180) / len(confidences_words_180)) if confidences_words_180 else 0.0)
+
+        # Переворачиваем результаты для повернутого изображения
+        words_180 = words_180[::-1]
+        bboxes_180 = bboxes_180[::-1]
+        confidences_words_180 = confidences_words_180[::-1]
 
         return (
             OCRResult(
                 image=image_cv,
-                bbox_ocr=bbox,
+                bbox_ocr=bboxes,
                 text_ocr=" ".join(words),
-                confidence_text_ocr=confidence_text,
+                confidence_text_ocr=-1 if len(confidence_texts) <= 0 else (sum(confidence_texts) / len(confidence_texts)),
                 words_ocr=words,
                 confidence_words_ocr=confidences_words
             ),
             OCRResult(
-                image=rotated_image_180_cv,
-                bbox_ocr=bbox_180,
+                image=image_cv_180,
+                bbox_ocr=bboxes_180,
                 text_ocr=" ".join(words_180),
-                confidence_text_ocr=confidence_text_180,
+                confidence_text_ocr=-1 if len(confidence_texts_180) <= 0 else (sum(confidence_texts_180) / len(confidence_texts_180)),
                 words_ocr=words_180,
                 confidence_words_ocr=confidences_words_180
             )
@@ -124,12 +150,22 @@ class OCRResultSelectorOld:
 
         return int(previous_row[-1])
 
+
 class OCRResultSelector:
     def __init__(self, reference_data: List[str]):
         self.reference_data = reference_data
         self.algorithm_name = 'ensemble'
 
     def select_best_text_ensemble(self, result1: OCRResult, result2: OCRResult) -> OCRResultSelectorAlgotitm:
+
+        if not self.reference_data:
+            # Если reference_data пуст, выбираем по уверенности
+            best_result = result1 if result1.confidence_text_ocr >= result2.confidence_text_ocr else result2
+            return OCRResultSelectorAlgotitm(ocr_result=best_result, text_algoritm=None)
+
+        if result1.confidence_text_ocr == -1 and result2.confidence_text_ocr == -1:
+            return OCRResultSelectorAlgotitm(ocr_result=result1, text_algoritm=None)
+
         methods = [
             (self.find_best_match_levenshtein, False),
             (self.find_best_match_seq_match, True),
@@ -142,13 +178,13 @@ class OCRResultSelector:
 
         votes = []
 
-        for method, maximize in methods:
+        for method, maximize in methods: # TODO: add colldection statics
             match1, score1 = method(result1.text_ocr)
             match2, score2 = method(result2.text_ocr)
-            print("-"*5, method.__name__, "-"*5)
-            print("True rotation", match1, score1, f"text_ocr={result1.text_ocr}")
-            print("False rotation", match2, score2, f"text_ocr={result2.text_ocr}")
-            print("\n\n\n")
+            # print("-"*5, method.__name__, "-"*5)
+            # print("True rotation", match1, score1, f"text_ocr={result1.text_ocr}")
+            # print("False rotation", match2, score2, f"text_ocr={result2.text_ocr}")
+            # print("\n\n\n")
 
             if maximize:
                 if score1 > score2:
@@ -156,18 +192,20 @@ class OCRResultSelector:
                 elif score2 > score1:
                     votes.append((result2, match2))
                 else:
-                    best = result1 if result1.confidence_text_ocr >= result2.confidence_text_ocr else result2
-                    best_match = match1 if best == result1 else match2
-                    votes.append((best, best_match))
+                    best_text_ocr = result1.text_ocr if result1.confidence_text_ocr >= result2.confidence_text_ocr else result2.text_ocr
+                    best_result = result1 if result1.confidence_text_ocr >= result2.confidence_text_ocr else result2
+                    best_match = match1 if best_text_ocr == result1.text_ocr else match2
+                    votes.append((best_result, best_match))
             else:
                 if score1 < score2:
                     votes.append((result1, match1))
                 elif score2 < score1:
                     votes.append((result2, match2))
                 else:
-                    best = result1 if result1.confidence_text_ocr >= result2.confidence_text_ocr else result2
-                    best_match = match1 if best == result1 else match2
-                    votes.append((best, best_match))
+                    best_text_ocr = result1.text_ocr if result1.confidence_text_ocr >= result2.confidence_text_ocr else result2.text_ocr
+                    best_result = result1 if result1.confidence_text_ocr >= result2.confidence_text_ocr else result2
+                    best_match = match1 if best_text_ocr == result1.text_ocr else match2
+                    votes.append((best_result, best_match))
 
         # Группировка по match (эталонному тексту)
         match_counts = Counter([vote[1] for vote in votes])
@@ -289,6 +327,7 @@ def draw_predictions(
 
     # Для каждого результата OCR
     for i, (ocr_result, img) in enumerate(zip(result_list, images)):
+        rotated_image = img.copy()
         annotated_image = img.copy()
 
         # Отрисовка предсказаний модели (зеленый)
@@ -307,7 +346,7 @@ def draw_predictions(
 
         # Если у нас OCRResultSelectorAlgotitm — добавляем выделение выбора алгоритма (синий)
         if text_algoritm:
-            text_position_algo = (10, annotated_image.shape[0] - 30)  # Внизу слева
+            text_position_algo = (10, annotated_image.shape[0] - 20)  # Внизу слева
             cv2.putText(
                 annotated_image, f"Algorithm choice: {text_algoritm}",
                 text_position_algo, cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2  # Красный текст
@@ -318,30 +357,13 @@ def draw_predictions(
 
     # Определяем путь для сохранения каждого изображения
     files = os.listdir(save_folder)
-    output_path = os.path.join(save_folder, f"recognition_text_image_{len(files) + 1}.png")
+    recognition_output_path = os.path.join(save_folder, f"recognition_text_image_{len(files) // 2 + 1}.png")
+    rotated_output_path = os.path.join(save_folder, f"rotated_text_image_{len(files) // 2 + 1}.png")
 
     plt.tight_layout()
-    plt.savefig(output_path)
+    if not isinstance(ocr_results, tuple):
+        cv2.imwrite(rotated_output_path, rotated_image)
+    else:
+        recognition_output_path = os.path.join(save_folder, f"recognition_text_image_{len(files) + 1}.png")
+    plt.savefig(recognition_output_path)
     plt.close(fig)  # Закрываем фигуру, чтобы избежать утечек памяти
-
-if __name__ == "__main__":
-    model_langs = ['ru']
-    allowlist = '0123456789феспФЕСПeECc-*_.,'
-    text_recognition = EasyOCRTextRecognition(model_langs, allowlist)
-
-    codes = ["21353-21",
-             "27353-27",
-             "27353-21",
-             "2135-27",
-             "273-21"]
-
-    ocr_selector = OCRResultSelector(codes)
-
-    # Получаем два варианта результата OCR
-    img_path = r"D:\я у мамы программист\Diplom\KernAI-backend-fastapi\temp\user1\party_fd0c5323-3525-4fb8-8d0c-2090ad0c444c\step5_rotate_image\process_image_3.png"
-    img = Image.open(img_path)
-    ocr_result_1, ocr_result_2 = text_recognition.recognize_text(img)
-
-    # Выбираем наилучший вариант
-    best_result = ocr_selector.select_best_text_ensemble(ocr_result_1, ocr_result_2)
-    print(best_result)

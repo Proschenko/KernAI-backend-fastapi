@@ -219,26 +219,3 @@ class FolderOperation:
                     # print(f"Копирование файла из {annotation_src} в {annotation_dst}")
                 else:
                     print(f"Путь {annotation_src} не существует")
-
-
-if __name__ == "__main__":
-    # Укажите путь к директории и расширение файлов
-    directory_path = r"D:\Diplom\datasets\1 source images"
-    FolderOperation().rename_files_in_directory(directory_path)
-
-    # Изменение размера исходного изображения
-    input_folder = r'D:\Diplom\datasets\1 source images'
-    output_folder = r'D:\Diplom\datasets\2 source resize images'
-    size = (960, 540)
-    FolderOperation().resize_source_image(input_folder, output_folder, size)
-
-    # Изменение размера изображения керна
-    folder_path = r'D:\Diplom\datasets\4 preprocess images step 2 by peak brightness histogram'
-    size = 360  # Укажите желаемый размер N
-    FolderOperation().resize_kern_images_in_folder(folder_path, size)
-
-    # Пример использования функции
-    dataset_dir = r'D:\Diplom\datasets\8_dataset-text-obb-detection-train'
-    dataset_with_annotations_dir = r'D:\Diplom\datasets\0_dataset_folder\dataset-text-obb-detection-360-1'
-    yaml_file = os.path.join(r"D:\Diplom\datasets", 'data.yaml')
-    FolderOperation().prepare_dataset_with_hierarchy(dataset_dir, dataset_with_annotations_dir, yaml_file)

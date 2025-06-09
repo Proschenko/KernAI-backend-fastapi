@@ -2,12 +2,12 @@
 from celery import Celery
 from redis import Redis
 
-redis_client = Redis(host="localhost", port=6379, db=0)
+redis_client = Redis(host="redis", port=6379, db=0)
 
 celery_app = Celery(
     "worker",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/0",
+    broker="redis://redis:6379/0",
+    backend="redis://redis:6379/0",
     include=["app.utils.celary.tasks"]  # Добавляем модуль с задачами
 )
 #TODO: Переделать для Linux

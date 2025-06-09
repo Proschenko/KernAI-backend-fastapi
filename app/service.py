@@ -241,7 +241,7 @@ def process_image(request_data: dict):
     model = ImagePipelineModel(
         request=request,
         yolo_model_path_kern_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_kern.pt").replace("\\", "/"),
-        yolo_model_path_text_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_text.pt").replace("\\", "/")
+        yolo_model_path_text_detection=os.path.join(os.getcwd(), "models", "YOLO_detect_text_v.4.pt").replace("\\", "/")
     )
 
     result = model.execute_pipeline()
@@ -397,3 +397,4 @@ async def insert_all_data(session: AsyncSession, data, user_id: str):
         await session.rollback()
         logger.error("Ошибка при вставке данных: %s", str(e))
         raise HTTPException(status_code=500, detail="Ошибка при вставке данных")
+
