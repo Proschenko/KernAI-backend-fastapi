@@ -54,8 +54,9 @@ class ImagePipelineModel:
         
         # Шаг 4: Кластеризация
         step4_folder = os.path.join(self.output_folder, 'step4_cluster_image')
+        cluster_description = "cluster_description"
         os.makedirs(step4_folder, exist_ok=True)
-        clustered_images = [self.image_processing.process_cluster_image(img, save_folder_path=step4_folder) for img in tqdm(clahe_images, desc="Кластеризация")]
+        clustered_images = [self.image_processing.process_cluster_image(img, save_folder_path=step4_folder, cluster_description=cluster_description) for img in tqdm(clahe_images, desc="Кластеризация")]
         
         # Шаг 5: Поворот изображений
         step5_folder = os.path.join(self.output_folder, 'step5_rotate_image')
