@@ -269,15 +269,45 @@ class ImageOperation:
                     mask = (labels == cluster_id)
 
                     if len(image_np.shape) == 3 and image_np.shape[2] == 3:
-                        single_cluster_img = np.full_like(clustered_image_np, 150, dtype=np.uint8)
+                        single_cluster_img = np.full_like(clustered_image_np, 255, dtype=np.uint8)
                         single_cluster_img[mask] = clustered_image_np[mask]
                     else:
-                        single_cluster_img = np.full_like(clustered_image_np, 150, dtype=np.uint8)
+                        single_cluster_img = np.full_like(clustered_image_np, 255, dtype=np.uint8)
                         single_cluster_img[mask] = clustered_image_np[mask]
 
                     single_image = Image.fromarray(single_cluster_img)
                     filename = f"clustered_image_{image_index}_cluster_{cluster_id}.png"
                     single_image.save(os.path.join(cluster_folder, filename))
+
+                    # Построение и сохранение гистограммы с сортировкой по убыванию
+                    cluster_colors = kmeans.cluster_centers_.astype(int)
+                    counts = np.bincount(kmeans.labels_, minlength=n_clusters)
+
+                    # Создание структуры с сортировкой
+                    cluster_data = [
+                        (i, count, cluster_colors[i]) for i, count in enumerate(counts)
+                    ]
+                    cluster_data.sort(key=lambda x: x[1], reverse=True)
+
+                    sorted_ids = [item[0] for item in cluster_data]
+                    sorted_counts = [item[1] for item in cluster_data]
+                    sorted_colors = [tuple(color / 255) if len(color) == 3 else (color[0] / 255,) * 3 for _, _, color in cluster_data]
+
+                    plt.figure(figsize=(8, 6))
+                    plt.bar(range(n_clusters), sorted_counts, color=sorted_colors)
+                    plt.xlabel("Номер кластера")
+                    plt.ylabel("Количество пикселей")
+                    plt.title(f"Распределение пикселей по кластерам (изображение {image_index})")
+                    plt.xticks(range(n_clusters), [f"{cluster_id}" for cluster_id in sorted_ids])
+
+                    # Подписи над столбцами
+                    for i, count in enumerate(sorted_counts):
+                        plt.text(i, count + max(sorted_counts) * 0.01, str(count), ha='center', va='bottom', fontsize=9)
+
+                    hist_path = os.path.join(cluster_folder, f"clustered_image_{image_index}_histogram.png")
+                    plt.tight_layout()
+                    plt.savefig(hist_path)
+                    plt.close()
 
         return clustered_image
 
@@ -291,3 +321,4 @@ if __name__ == "__main__":
     cluster_description = "cluster_description"
     save_folder_path = r"D:\я у мамы программист\Diplom\KernAI-backend-fastapi\temp\user1\step4_cluster_image"
     ImageOperation().process_cluster_image(image_inner=image, save_folder_path=save_folder_path, cluster_description=cluster_description)
+    
