@@ -99,62 +99,6 @@ class EasyOCRTextRecognition:
         )
 
 
-class OCRResultSelectorOld:
-    def __init__(self, reference_data: List[str]):
-        self.reference_data = reference_data
-        self.algorithm_name = 'levenshtein_distance'
-
-    def select_best_text(self, result1: OCRResult, result2: OCRResult) -> OCRResultSelectorAlgotitm:
-        """Выбирает лучший текст на основе сравнения с эталоном или уверенности модели."""  
-
-        if not self.reference_data:
-            # Если reference_data пуст, выбираем по уверенности
-            best_result = result1 if result1.confidence_text_ocr >= result2.confidence_text_ocr else result2
-            return OCRResultSelectorAlgotitm(ocr_result=best_result, text_algoritm=None)
-
-        # Находим наиболее похожие эталонные тексты для обоих вариантов OCR
-        best_match1_text, best_match1_distance = self.find_best_match(result1.text_ocr)
-        best_match2_text, best_match2_distance = self.find_best_match(result2.text_ocr)
-
-        if best_match1_distance < best_match2_distance:
-            best_result = result1
-            best_match_text = best_match1_text
-        elif best_match1_distance > best_match2_distance:
-            best_result = result2
-            best_match_text = best_match2_text
-        else:
-            # Если расстояния равны, выбираем по уверенности
-            best_result = result1 if result1.confidence_text_ocr >= result2.confidence_text_ocr else result2
-            best_match_text = best_match1_text  # Можно взять любой, так как расстояния равны
-
-        return OCRResultSelectorAlgotitm(ocr_result=best_result, text_algoritm=best_match_text)
-
-    def find_best_match(self, text: str) -> Tuple[str, int]:
-        """Находит наиболее похожий текст из базы данных по Левенштейну."""
-        if not text:
-            return "", float('inf')  # Если пустой текст, расстояние максимально большое
-        matches = [(ref, self.levenshtein_distance(text, ref)) for ref in self.reference_data]
-        return min(matches, key=lambda x: x[1])  # Выбираем с минимальным расстоянием
-
-    def levenshtein_distance(self, s1: str, s2: str) -> int:
-        """Расчет расстояния Левенштейна между двумя строками."""
-        if len(s1) < len(s2):
-            s1, s2 = s2, s1  # Гарантируем, что s1 длиннее
-
-        previous_row = np.zeros(len(s2) + 1)
-        for i, c1 in enumerate(s1):
-            current_row = previous_row + 1
-            current_row[1:] = np.minimum(
-                current_row[1:], np.add(previous_row[:-1], [c1 != c2 for c2 in s2])
-            )
-            current_row[1:] = np.minimum(
-                current_row[1:], current_row[:-1] + 1
-            )
-            previous_row = current_row
-
-        return int(previous_row[-1])
-
-
 class OCRResultSelector:
     def __init__(self, reference_data: List[str]):
         self.reference_data = reference_data
@@ -356,6 +300,25 @@ def draw_predictions(
 
             axs[i].text(
                 text_x, text_y, text,
+                fontproperties=font_prop,
+                color='red',
+                verticalalignment='top',
+                bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, pad=1)
+            )
+                # Добавляем описание выбранного алгоритма — только для одного изображения
+        if not isinstance(ocr_results, tuple) and i == 0:
+            algorithm_label = "Выбор алгоритма:"
+            algorithm_text = ocr_results.text_algoritm or "Не указан"
+
+            axs[i].text(
+                10, annotated.shape[0] - 45, algorithm_label,
+                fontproperties=font_prop,
+                color='red',
+                verticalalignment='top',
+                bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, pad=1)
+            )
+            axs[i].text(
+                10, annotated.shape[0] - 20, algorithm_text,
                 fontproperties=font_prop,
                 color='red',
                 verticalalignment='top',
