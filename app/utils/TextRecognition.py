@@ -5,6 +5,8 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 from typing import List, Tuple, Union
+from matplotlib import font_manager
+from matplotlib.patches import Rectangle
 from ..schemas import OCRResult, OCRResultSelectorAlgotitm
 from .KernDetection import YOLODetection
 from difflib import SequenceMatcher
@@ -21,7 +23,9 @@ class EasyOCRTextRecognition:
 
     def recognize_text(self, image: Image.Image, text_detection: YOLODetection=None, output_folder: str=r"D:\Diplom\KernAI\KernAI-back-fastapi-celery\temp\test_user\party_test_party") -> Tuple[OCRResult, OCRResult]:
         """Распознает текст и возвращает два возможных результата."""
-        image = Image.fromarray(image)
+        if isinstance(image, np.ndarray):
+            image = Image.fromarray(image)
+
         bboxes = []
         words = []
         confidences_words = []
@@ -169,9 +173,9 @@ class OCRResultSelector:
         methods = [
             (self.find_best_match_levenshtein, False),
             (self.find_best_match_seq_match, True),
-            (self.find_best_match_jaccard, True),
-            (self.find_best_match_ngram, True),
-            (self.find_best_match_cosine, True),
+            # (self.find_best_match_jaccard, True),
+            # (self.find_best_match_ngram, True),
+            # (self.find_best_match_cosine, True),
             (self.find_best_match_jaro, True),
             (self.find_best_match_needleman, True),
         ]
@@ -298,7 +302,6 @@ def draw_predictions(
     Рисует предсказания на изображении и сохраняет результат.
 
     Аргументы:
-        image (Image.Image): Исходное изображение.
         ocr_results (OCRResult | (OCRResult, OCRResult)): Один или два результата OCR.
         save_folder_path (str): Путь к папке для сохранения.
 
@@ -306,54 +309,58 @@ def draw_predictions(
         Tuple[np.ndarray, str]: Изображение с разметкой и путь к сохраненному файлу.
     """
 
-    # Определяем, один или два результата
     if isinstance(ocr_results, tuple):
         result_list = list(ocr_results)
         images = [ocr_results[0].image, ocr_results[1].image]
-        text_algoritm = None
-        fig, axs = plt.subplots(1, 2, figsize=(12, 6))  # Два изображения
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
         sub_folder = 'two_images'
     else:
         result_list = [ocr_results.ocr_result]
         images = [ocr_results.ocr_result.image]
-        text_algoritm = ocr_results.text_algoritm
-        fig, axs = plt.subplots(1, 1, figsize=(6, 6))  # Одно изображение
+        fig, axs = plt.subplots(1, 1, figsize=(6, 6))
         axs = [axs]
-        sub_folder = 'one_image' 
+        sub_folder = 'one_image'
 
-    # Создаем подкаталог в зависимости от количества изображений
     save_folder = os.path.join(save_folder_path, sub_folder)
     os.makedirs(save_folder, exist_ok=True)
 
-    # Для каждого результата OCR
+    font_prop = font_manager.FontProperties(family='DejaVu Sans', size=20)
+
     for i, (ocr_result, img) in enumerate(zip(result_list, images)):
         rotated_image = img.copy()
-        annotated_image = img.copy()
+        annotated = img.copy()
 
-        # Отрисовка предсказаний модели (зеленый)
-        for word, bbox, confidence in zip(ocr_result.words_ocr, ocr_result.bbox_ocr, ocr_result.confidence_words_ocr):
-            if bbox:
-                (top_left, _, bottom_right, _) = bbox
-                top_left = tuple(map(int, top_left))
-                bottom_right = tuple(map(int, bottom_right))
-
-                cv2.rectangle(annotated_image, top_left, bottom_right, (0, 255, 0), 2)  # Зеленый прямоугольник
-                text_position = (top_left[0], top_left[1] - 10)
-                cv2.putText(
-                    annotated_image, f"{word} ({round(confidence, 2)})",
-                    text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2  # Красный текст
-                )
-
-        # Если у нас OCRResultSelectorAlgotitm — добавляем выделение выбора алгоритма (синий)
-        if text_algoritm:
-            text_position_algo = (10, annotated_image.shape[0] - 20)  # Внизу слева
-            cv2.putText(
-                annotated_image, f"Algorithm choice: {text_algoritm}",
-                text_position_algo, cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2  # Красный текст
-            )
-
-        axs[i].imshow(cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB))
+        axs[i].imshow(cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB))
         axs[i].axis("off")
+
+        for word, bbox, confidence in zip(ocr_result.words_ocr, ocr_result.bbox_ocr, ocr_result.confidence_words_ocr):
+            if not bbox:
+                continue
+
+            (tl, _, br, _) = bbox
+            x1, y1 = map(int, tl)
+            x2, y2 = map(int, br)
+
+            # Рисуем bbox
+            rect_w, rect_h = x2 - x1, y2 - y1
+            axs[i].add_patch(Rectangle((x1, y1), rect_w, rect_h, linewidth=2, edgecolor='lime', facecolor='none'))
+
+            # Подготовка текста
+            text = f"{word} ({round(confidence, 2)})"
+            text_x = x1
+            text_y = y1 - 5
+
+            # Если текст выходит за верх — опускаем вниз
+            if text_y < 10:
+                text_y = y1 + 15
+
+            axs[i].text(
+                text_x, text_y, text,
+                fontproperties=font_prop,
+                color='red',
+                verticalalignment='top',
+                bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, pad=1)
+            )
 
     # Определяем путь для сохранения каждого изображения
     files = os.listdir(save_folder)
@@ -366,4 +373,28 @@ def draw_predictions(
     else:
         recognition_output_path = os.path.join(save_folder, f"recognition_text_image_{len(files) + 1}.png")
     plt.savefig(recognition_output_path)
-    plt.close(fig)  # Закрываем фигуру, чтобы избежать утечек памяти
+    plt.close(fig)
+
+    return annotated, recognition_output_path
+
+if __name__ == "__main__":
+    image_path = r"C:\Users\magmy\Downloads\Telegram Desktop\party_6ecc441e-dd69-4139-87bf-63528d4589fb\party_6ecc441e-dd69-4139-87bf-63528d4589fb\step5_rotate_image\process_image_18.png"
+    img = Image.open(image_path)
+
+    model_path = r"D:\я у мамы программист\Diplom\KernAI-backend-fastapi\models\YOLO_detect_text_v.4.pt"
+    kern_text_detection = YOLODetection(model_path)
+
+    ocr_selector = OCRResultSelector(None)
+    step6_folder = r"D:\я у мамы программист\Diplom\KernAI-backend-fastapi\temp\user1\step6_recognize_text"
+    model_langs = ['ru']
+    allowlist = '0123456789феспФЕСПeECc-*_.,'
+    text_recognition = EasyOCRTextRecognition(model_langs, allowlist)
+    # Получаем два варианта результата OCR
+    ocr_result_1, ocr_result_2 = text_recognition.recognize_text(img, text_detection=kern_text_detection, output_folder=step6_folder)
+
+    draw_predictions((ocr_result_1, ocr_result_2), step6_folder)
+
+    # Выбираем наилучший вариант
+    best_result = ocr_selector.select_best_text_ensemble(ocr_result_1, ocr_result_2)
+
+    draw_predictions(best_result, step6_folder)
