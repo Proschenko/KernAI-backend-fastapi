@@ -117,10 +117,7 @@ class OCRResultSelector:
         methods = [
             (self.find_best_match_levenshtein, False),
             (self.find_best_match_seq_match, True),
-            # (self.find_best_match_jaccard, True),
-            # (self.find_best_match_ngram, True),
-            # (self.find_best_match_cosine, True),
-            (self.find_best_match_jaro, True),
+            (self.find_best_match_jaro_winkler, True),
             (self.find_best_match_needleman, True),
         ]
 
@@ -226,9 +223,9 @@ class OCRResultSelector:
         best_index = int(np.argmax(similarities))
         return self.reference_data[best_index], similarities[best_index]
 
-    def find_best_match_jaro(self, text: str) -> Tuple[str, float]:
+    def find_best_match_jaro_winkler(self, text: str) -> Tuple[str, float]:
         return max(
-            ((ref, textdistance.jaro.normalized_similarity(text, ref)) for ref in self.reference_data),
+            ((ref, textdistance.jaro_winkler.normalized_similarity(text, ref)) for ref in self.reference_data),
             key=lambda x: x[1]
         )
 

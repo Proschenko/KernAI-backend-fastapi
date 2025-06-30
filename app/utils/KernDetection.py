@@ -404,3 +404,14 @@ class YOLODetection:
                 # Создание уникального имени файла
                 output_path = os.path.join(save_folder_path, f"{base_name}_{len(files) + 1}{ext}")
                 cv2.imwrite(output_path, image)
+
+if __name__ == "__main__":
+    from PIL import Image
+    model_path = r"D:\я у мамы программист\Diplom\KernAI-backend-fastapi\models\YOLO_detect_kern.pt"
+    # model_path = r"D:\я у мамы программист\Diplom\KernAI-backend-fastapi\models\YOLO_detect_text_v.4.pt"
+    yolo_det = YOLODetection(model_path)
+
+    image_path = r"C:\Users\magmy\Downloads\Telegram Desktop\0,66 8e67bc26-fb72-482d-bbfc-a253e2e9e1cd.jpg"
+    # image_path = r"C:\Users\magmy\Downloads\Telegram Desktop\party_6ecc441e-dd69-4139-87bf-63528d4589fb\party_6ecc441e-dd69-4139-87bf-63528d4589fb\step4_cluster_image\clustered_image_1.png"
+    image = Image.open(image_path).convert("RGB")
+    yolo_det.visualize_predictions_obb(image, conf_threshold=95)
